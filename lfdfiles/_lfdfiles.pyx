@@ -46,11 +46,13 @@
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2019.1.24
+:License: 3-clause BSD
+
+:Version: 2019.2.20
 
 """
 
-__version__ = '2019.1.24'
+__version__ = '2019.2.20'
 
 
 from cython.parallel import parallel, prange
