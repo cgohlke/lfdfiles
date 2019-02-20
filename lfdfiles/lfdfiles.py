@@ -47,7 +47,9 @@ For command line usage run ``python -m lfdfiles --help``
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2019.1.24
+:License: 3-clause BSD
+
+:Version: 2019.2.20
 
 Requirements
 ------------
@@ -145,7 +147,7 @@ The following software is referenced in this module:
 
 from __future__ import division, print_function
 
-__version__ = '2019.1.24'
+__version__ = '2019.2.20'
 __docformat__ = 'restructuredtext en'
 __all__ = (
     'LfdFile', 'LfdFileSequence', 'LfdFileError',
@@ -169,7 +171,6 @@ import zipfile
 import warnings
 
 import numpy
-
 
 if sys.version_info[0] == 2:
     FILEMODE = 'rU'
@@ -212,7 +213,6 @@ else:
     def byte2int(b):
         """Return value of byte as int."""
         return b
-
 
 # delay import optional modules
 pyplot = None
@@ -714,6 +714,7 @@ class LfdFileSequence(object):
         self.close()
 
     def close(self):
+        """Close the file sequence."""
         pass
 
 
@@ -2998,7 +2999,7 @@ try:
         from ._lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa:
     else:
         from _lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa:
-except ImportError:
+except (ImportError, ValueError):
     pass
 
 
@@ -3946,7 +3947,11 @@ def main():
     @cli.command(help='Run unit tests.')
     def doctest():
         import doctest
-        os.chdir('tests')
+        try:
+            os.chdir('tests')
+        except Exception:
+            print('Test files not found.')
+            return
         numpy.set_printoptions(suppress=True, precision=2)
         try:
             numpy.set_printoptions(legacy='1.13')
