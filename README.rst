@@ -14,7 +14,9 @@ For command line usage run ``python -m lfdfiles --help``
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:Version: 2019.1.24
+:License: 3-clause BSD
+
+:Version: 2019.2.20
 
 Requirements
 ------------
