@@ -49,12 +49,12 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: 3-clause BSD
 
-:Version: 2019.2.20
+:Version: 2019.4.22
 
 Requirements
 ------------
 * `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Numpy 1.14 <https://www.numpy.org>`_
+* `Numpy 1.11.3 <https://www.numpy.org>`_
 * `Matplotlib 2.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
 * `Tifffile 2019.1.4 <https://pypi.org/project/tifffile/>`_
@@ -64,6 +64,8 @@ Requirements
 
 Revisions
 ---------
+2019.4.22
+    Fix setup requirements.
 2019.1.24
     Add plots for GlobalsLif, SimfcsV3draw, and VistaIfli.
     Support Python 3.7 and numpy 1.15.
@@ -147,7 +149,7 @@ The following software is referenced in this module:
 
 from __future__ import division, print_function
 
-__version__ = '2019.2.20'
+__version__ = '2019.4.22'
 __docformat__ = 'restructuredtext en'
 __all__ = (
     'LfdFile', 'LfdFileSequence', 'LfdFileError',
