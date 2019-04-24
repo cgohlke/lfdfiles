@@ -48,11 +48,11 @@
 
 :License: 3-clause BSD
 
-:Version: 2019.2.20
+:Version: 2019.4.22
 
 """
 
-__version__ = '2019.2.20'
+__version__ = '2019.4.22'
 
 
 from cython.parallel import parallel, prange
