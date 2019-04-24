@@ -8,9 +8,8 @@ import re
 import warnings
 
 from setuptools import setup, Extension
-from Cython.Distutils import build_ext
+from setuptools.command.build_ext import build_ext as _build_ext
 
-import numpy
 
 with open('lfdfiles/lfdfiles.py') as fh:
     code = fh.read()
@@ -35,15 +34,28 @@ if 'sdist' in sys.argv:
         fh.write(license)
     with open('README.rst', 'w') as fh:
         fh.write(readme)
-    numpy_required = '1.11.3'
 
-else:
-    numpy_required = numpy.__version__
+
+class build_ext(_build_ext):
+    """Delay import numpy until build."""
+    def finalize_options(self):
+        _build_ext.finalize_options(self)
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        self.include_dirs.append(numpy.get_include())
+
+
+# Work around "Cython in setup_requires doesn't work"
+# https://github.com/pypa/setuptools/issues/1317
+try:
+    import Cython  # noqa
+    ext = '.pyx'
+except ImportError:
+    ext = '.c'
 
 ext_modules = [
     Extension('lfdfiles._lfdfiles',
-              ['lfdfiles/_lfdfiles.pyx'],
-              include_dirs=[numpy.get_include()],
+              ['lfdfiles/_lfdfiles' + ext],
               extra_compile_args=['/openmp' if sys.platform == 'win32' else
                                   '-fopenmp'],
               extra_link_args=['' if sys.platform == 'win32' else
@@ -59,7 +71,8 @@ setup_args = dict(
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
     python_requires='>=2.7',
-    install_requires=['numpy>=%s' % numpy_required, 'click'],
+    install_requires=['numpy>=1.11.3', 'click'],
+    setup_requires=['setuptools>=18.0', 'numpy>=1.11.3'],  # , 'cython>=0.29.0'
     extras_require={'all': ['matplotlib>=2.2', 'tifffile>=2019.1.1']},
     tests_require=['pytest'],
     packages=['lfdfiles'],
