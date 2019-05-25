@@ -3,7 +3,7 @@ Laboratory for Fluorescence Dynamics (LFD) file formats
 
 Lfdfiles is a Python library and console script for reading, writing,
 converting, and viewing many of the proprietary file formats used to store
-experimental data at the `Laboratory for Fluorescence Dynamics
+experimental data and metadata at the `Laboratory for Fluorescence Dynamics
 <https://www.lfd.uci.edu/>`_.
 
 For command line usage run ``python -m lfdfiles --help``
@@ -16,7 +16,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: 3-clause BSD
 
-:Version: 2019.4.22
+:Version: 2019.5.22
 
 Requirements
 ------------
@@ -24,13 +24,18 @@ Requirements
 * `Numpy 1.11.3 <https://www.numpy.org>`_
 * `Matplotlib 2.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
-* `Tifffile 2019.1.4 <https://pypi.org/project/tifffile/>`_
+* `Tifffile 2019.5.22 <https://pypi.org/project/tifffile/>`_
   (optional for reading and writing TIFF)
 * `Click 7.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2019.5.22
+    Read and write Bio-Rad(tm) PIC files.
+    Read and write Voxx MAP palette files.
+    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw.
+    Rename save functions.
 2019.4.22
     Fix setup requirements.
 2019.1.24
@@ -112,3 +117,8 @@ The following software is referenced in this module:
 (10) `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
      data visualization and analysis, developed by the Hanchuan Peng group at
      the Allen Institute.
+(11) `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
+     for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
+     University.
+(12) `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
+     No. 4, is software for macromolecular X-Ray crystallography.
