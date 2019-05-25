@@ -36,7 +36,7 @@
 
 Lfdfiles is a Python library and console script for reading, writing,
 converting, and viewing many of the proprietary file formats used to store
-experimental data at the `Laboratory for Fluorescence Dynamics
+experimental data and metadata at the `Laboratory for Fluorescence Dynamics
 <https://www.lfd.uci.edu/>`_.
 
 For command line usage run ``python -m lfdfiles --help``
@@ -49,7 +49,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: 3-clause BSD
 
-:Version: 2019.4.22
+:Version: 2019.5.22
 
 Requirements
 ------------
@@ -57,13 +57,18 @@ Requirements
 * `Numpy 1.11.3 <https://www.numpy.org>`_
 * `Matplotlib 2.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
-* `Tifffile 2019.1.4 <https://pypi.org/project/tifffile/>`_
+* `Tifffile 2019.5.22 <https://pypi.org/project/tifffile/>`_
   (optional for reading and writing TIFF)
 * `Click 7.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2019.5.22
+    Read and write Bio-Rad(tm) PIC files.
+    Read and write Voxx MAP palette files.
+    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw.
+    Rename save functions.
 2019.4.22
     Fix setup requirements.
 2019.1.24
@@ -145,22 +150,31 @@ The following software is referenced in this module:
 (10) `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
      data visualization and analysis, developed by the Hanchuan Peng group at
      the Allen Institute.
+(11) `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
+     for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
+     University.
+(12) `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
+     No. 4, is software for macromolecular X-Ray crystallography.
+
 """
 
 from __future__ import division, print_function
 
-__version__ = '2019.4.22'
+__version__ = '2019.5.22'
 __docformat__ = 'restructuredtext en'
 __all__ = (
     'LfdFile', 'LfdFileSequence', 'LfdFileError',
     'SimfcsVpl', 'SimfcsVpp', 'SimfcsJrn', 'RawPal',
     'SimfcsBin', 'SimfcsRaw', 'SimfcsInt', 'SimfcsIntPhsMod',
     'SimfcsFit', 'SimfcsCyl', 'SimfcsRef', 'SimfcsBh', 'SimfcsBhz',
-    'SimfcsFbf', 'SimfcsFbd', 'SimfcsGpSeq', 'SimfcsMap', 'SimfcsV3draw',
+    'SimfcsFbf', 'SimfcsFbd', 'SimfcsGpSeq',
     'SimfcsB64', 'SimfcsI64', 'SimfcsZ64', 'SimfcsR64',
-    'GlobalsLif', 'GlobalsAscii',
+    'GlobalsLif', 'GlobalsAscii', 'VistaIfli',
+    'Ccp4Map', 'Vaa3dRaw', 'VoxxMap', 'BioradPic',
     'FlimfastFlif', 'FlimageBin', 'FlieOut', 'FliezI16', 'FliezDb2',
-    'VistaIfli', 'TiffFile', 'save_r64', 'save_map', 'save_v3draw')
+    'TiffFile', 'convert2tiff',
+    'simfcsr64_write', 'ccp4map_write', 'vaa3draw_write', 'voxxmap_write',
+    'bioradpic_write')
 
 import os
 import sys
@@ -1583,7 +1597,7 @@ class SimfcsBhz(SimfcsBh):
         """Return image data as (256, 256, 256) shaped array of float32."""
         with zipfile.ZipFile(self._fh) as zf:
             data = zf.read(zf.filelist[0])
-        return numpy.frombuffer(data, self.dtype).reshape(self.shape)
+        return numpy.frombuffer(data, self.dtype).reshape(self.shape).copy()
 
 
 class SimfcsB64(LfdFile):
@@ -1619,7 +1633,7 @@ class SimfcsB64(LfdFile):
         fsize = self._filesize - 4
         if fsize % self.dtype.itemsize:
             raise ValueError('file size mismatch')
-        elif 'carpet' in self._filename.lower():
+        if 'carpet' in self._filename.lower():
             self.shape = (int((fsize // self.dtype.itemsize) // self.isize),
                           self.isize)
         elif fsize % size:
@@ -1674,7 +1688,9 @@ class SimfcsI64(LfdFile):
         """Return data as 2D array of float32."""
         bufsize = product(self.shape) * self.dtype.itemsize + 4
         data = zlib.decompress(self._fh.read(), 15, bufsize)
-        return numpy.frombuffer(data[4:], self.dtype).reshape(*self.shape)
+        data = numpy.frombuffer(data, self.dtype, offset=4)
+        data = data.copy()  # make writable
+        return data.reshape(*self.shape)
 
     def _totiff(self, tif, **kwargs):
         """Write image data to TIFF file."""
@@ -1726,7 +1742,9 @@ class SimfcsZ64(LfdFile):
         bufsize = product(self.shape) * self.dtype.itemsize + 16
         data = zlib.decompress(self._fh.read(), 15, bufsize)
         try:
-            data = numpy.frombuffer(data[self._skip+8:], '<' + self.dtype.char)
+            data = numpy.frombuffer(data, '<' + self.dtype.char,
+                                    offset=self._skip+8)
+            data = data.copy()  # make writable
             return data.reshape(*self.shape)
         except ValueError:
             return data[2:].reshape(*self.shape[1:])
@@ -1781,11 +1799,12 @@ class SimfcsR64(SimfcsRef):
         """Return data as 3D array of float32."""
         bufsize = product(self.shape) * self.dtype.itemsize + 4
         data = zlib.decompress(self._fh.read(), 15, bufsize)
-        data = numpy.frombuffer(data[4:], '<' + self.dtype.char)
+        data = numpy.frombuffer(data, '<' + self.dtype.char, offset=4)
+        data = data.copy()  # make writable
         return data.reshape(*self.shape)
 
 
-def save_r64(filename, data):
+def simfcsr64_write(filename, data):
     """Save referenced data to R64 file.
 
     Refer to the SimfcsR64 class for the format of referenced data.
@@ -1801,7 +1820,7 @@ def save_r64(filename, data):
     Examples
     --------
     >>> data = numpy.arange(5*256*256).reshape(5, 256, 256).astype('float32')
-    >>> save_r64('_test.r64', data)
+    >>> simfcsr64_write('_test.r64', data)
 
     """
     if data.dtype.char != 'f':
@@ -1813,320 +1832,6 @@ def save_r64(filename, data):
     data = zlib.compress(data)
     with open(filename, 'wb') as fh:
         fh.write(data)
-
-
-class SimfcsMap(LfdFile):
-    """SimFCS volume data.
-
-    SimFCS MAP files contain 3D volume data stored in CCP4 map format
-    used by the Electron Microscopy Data Bank.
-    <http://emdatabank.org/mapformat.html>
-    <http://www.ccp4.ac.uk/html/maplib.html>
-    <ftp://ftp.wwpdb.org/pub/emdb/doc/map_format/EMDB_mapFormat_v1.0.pdf>
-
-    Attributes
-    ----------
-    shape : tuple of 3 int
-        Shape of data array contained in file.
-    start : tuple of 3 int
-        Position of first section, row, and column (voxel grid units).
-    cell_interval : tuple of 3 int
-        Intervals per unit cell repeat along Z, Y, X.
-    cell_length : tuple of 3 float
-        Unit Cell repeats along Z, Y, X in Angstroms.
-    cell_angle : tuple of 3 float
-        Unit Cell angles (alpha, beta, gamma) in degrees.
-    map_src : tuple of 3 int
-        Relationship of Z, Y, X axes to sections, rows, columns
-    density_min, density_max, density_mean: float
-        Minimum, maximum, average density.
-    density_rms : float
-        Rms deviation of map from mean density.
-    spacegoup : int
-        IUCr space group number (1-230).
-    skew_matrix, skew_translation : ndarray or None
-        Skew matrix and translation vector (if any, else None).
-    symboltable : list of byte strings
-       Symmetry records as defined in International Tables.
-
-    Examples
-    --------
-    >>> with SimfcsMap('simfcs.ccp4') as f:
-    ...     print(f.asarray()[100, 100, 100])
-    1.0
-
-    """
-    _filepattern = r'.*\.(map|ccp4)'
-    _filesizemin = 1024 + 80
-    _dtypes = {0: 'i1', 1: 'i2', 2: 'f4', 4: 'q8', 5: 'i1'}
-
-    def _init(self):
-        """Read CCP4 file header and symboltable."""
-        header = self._fh.read(1024)
-        if header[208:212] not in (b'MAP ', b'PAM\x00', b'MAP\x00'):
-            raise LfdFileError(self, ' %s' % header[:32])
-        try:
-            (nc, nr, ns,
-             mode,  # data type
-             ncstart, nrstart, nsstart,
-             nx, ny, nz,
-             x_length, y_length, z_length,
-             alpha, beta, gamma,
-             mapc, mapr, maps,
-             self.density_min, self.density_max, self.density_mean,
-             self.spacegoup,
-             nsymbt,  # number of bytes used for storing symmetry operators
-             skew_matrix_flag,
-             S11, S12, S13, S21, S22, S23, S31, S32, S33,
-             T1, T2, T3,
-             # extra,
-             map_,  # b'MAP '
-             machst,  # machine stamp,
-             self.density_rms,
-             nlabl,  # number of labels used
-             L0, L1, L2, L3, L4, L5, L6, L7, L8, L9
-             ) = struct.unpack('3ii3i3i3f3f3i3fiii9f3f60x4s4sfi'
-                               '80s80s80s80s80s80s80s80s80s80s', header)
-        except struct.error as e:
-            raise LfdFileError(self, e)
-        try:
-            # machst = header[212:216]
-            byteorder = {b'DA\x00\x00': '<', b'\x11\x11\x00\x00': '>'}[machst]
-        except KeyError:
-            byteorder = '='
-            warnings.warn('SimfcsMap: unknown machine stamp: %s' % machst)
-        try:
-            self.dtype = byteorder + SimfcsMap._dtypes[mode]
-        except KeyError:
-            raise LfdFileError(self, 'unknown mode: %s' % mode)
-        self.shape = ns, nr, nc
-        self.start = nsstart, nrstart, ncstart
-        self.cell_interval = nz, ny, nx
-        self.cell_length = z_length, y_length, x_length
-        self.cell_angle = alpha, beta, gamma
-        self.map_src = maps, mapr, mapc
-        if skew_matrix_flag != 0:
-            self.skew_translation = numpy.array([T1, T2, T3], 'float64')
-            self.skew_matrix = numpy.array([[S11, S12, S13],
-                                            [S21, S22, S23],
-                                            [S31, S32, S33]], 'float64')  # .T?
-        else:
-            self.skew_translation = None
-            self.skew_matrix = None
-        if 0 <= nlabl <= 10:
-            self.labels = [stripnull(lbl) for lbl in
-                           (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9)[:nlabl]]
-        else:
-            self.labels = []
-        if nsymbt < 0 or nsymbt % 80:
-            raise LfdFileError(self, 'invalid symbol table size: %i' % nsymbt)
-        self.symboltable = [stripnull(self._fh.read(80))
-                            for _ in range(nsymbt // 80)]
-        self.axes = 'ZYX'
-
-    def _asarray(self, memmap=False):
-        """Return volume data as numpy array.
-
-        Parameters
-        ----------
-        memmap : bool
-            If True, use numpy.memmap to read array.
-
-        """
-        if memmap:
-            return numpy.memmap(self._fh, dtype=self.dtype, mode='r',
-                                offset=self._pos, shape=self.shape)
-        data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
-        return data.reshape(self.shape)
-
-    def _str(self):
-        """Return additional information about file."""
-        return '* cell length: %s' % (self.cell_length,)
-
-
-def save_map(filename, data, start=(0, 0, 0), cell_interval=None,
-             cell_length=None, cell_angle=(90, 90, 90), map_src=(3, 2, 1),
-             density=None, density_rms=0, spacegroup=1,
-             skew_matrix=None, skew_translation=None, symboltable=b'',
-             labels=(b'Created by lfdfiles.py', )):
-    """Save 3D volume data to CCP4 MAP formatted file.
-
-    Parameters
-    ----------
-    filename : str
-        Name of file to write.
-    data : 3D array_like
-        Input volume.
-
-    Refer to the SimfcsMap attributes for other parameters.
-
-    Examples
-    --------
-    >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('f4')
-    >>> save_map('_test.ccp4', data)
-
-    """
-    data = numpy.asarray(data)
-    if data.ndim != 3:
-        raise ValueError('data must be 3 dimensional')
-    try:
-        mode = {'i1': 0, 'i2': 1, 'f4': 2, 'q8': 4}[data.dtype.str[-2:]]
-    except KeyError:
-        raise ValueError('dtype not supported by MAP format')
-    if cell_interval is None:
-        cell_interval = data.shape
-    if cell_length is None:
-        cell_length = data.shape  # ?
-    if density is None:
-        density = numpy.min(data), numpy.max(data), numpy.mean(data)
-    if skew_matrix is None or skew_translation is None:
-        skew_matrix_flag = 0
-        S = numpy.zeros((3, 3))
-        T = numpy.zeros(3)
-    else:
-        skew_matrix_flag = 1
-        S = numpy.array(skew_matrix)
-        T = numpy.array(skew_translation)
-    assert S.shape == (3, 3)
-    assert T.shape == (3,)
-    labels = list(labels)[:10] if labels else []
-    nlabl = len(labels)
-    labels = [l[:79] for l in labels]
-    labels.extend(b'' for _ in range(10 - nlabl))
-
-    header = struct.pack(
-        '3ii3i3i3f3f3i3fiii9f3f60x4s4sfi80s80s80s80s80s80s80s80s80s80s',
-        data.shape[2], data.shape[1], data.shape[0],
-        mode,
-        start[2], start[1], start[0],
-        cell_interval[2], cell_interval[1], cell_interval[0],
-        cell_length[2], cell_length[1], cell_length[0],
-        cell_angle[0], cell_angle[1], cell_angle[2],
-        map_src[2], map_src[1], map_src[0],
-        density[0], density[1], density[2],
-        spacegroup,
-        len(symboltable),
-        skew_matrix_flag,
-        S[0, 0], S[0, 1], S[0, 2],
-        S[1, 0], S[1, 1], S[1, 2],
-        S[2, 0], S[2, 1], S[2, 2],
-        T[0], T[1], T[2],
-        # extra,
-        b'MAP ',
-        {'little': b'DA\x00\x00', 'big': b'\x11\x11\x00\x00'}[sys.byteorder],
-        density_rms,
-        len(labels),
-        labels[0], labels[1], labels[2], labels[3], labels[4],
-        labels[5], labels[6], labels[7], labels[8], labels[9],
-    )
-    with open(filename, 'wb') as fh:
-        fh.write(header)
-        fh.write(symboltable)
-        data.tofile(fh)
-
-
-class SimfcsV3draw(LfdFile):
-    """SimFCS multi-channel volume data.
-
-    SimFCS V3DRAW files contain 4D CZYX multi-channel volume data stored in
-    Vaa3D RAW format.
-
-    The data is stored C-contiguously as uint8, uint16 or float32 in little
-    or big-endian byte order, after a header defining data type, endianess,
-    and shape.
-
-    Examples
-    --------
-    >>> with SimfcsV3draw('vaa3d.v3draw') as f:
-    ...     print(f.asarray()[2, 100, 100, 100])
-    138
-
-    """
-    _filepattern = r'.*\.(v3draw|raw)'
-    _filesizemin = 24 + 1 + 2 + 4*2  # 2 byte format
-    _figureargs = {'figsize': (8, 8)}
-
-    def _init(self):
-        """Read header and validate file size."""
-        # read 2 byte format header
-        header = self._fh.read(24 + 1 + 2 + 4*2)
-        # first 24 bytes are 'raw_image_stack_by_hpeng'
-        if not header.startswith(b'raw_image_stack_by_hpeng'):
-            raise LfdFileError(self)
-        # next byte is byte order
-        byteorder = {b'B': '>', b'L': '<'}[header[24:25]]
-        # next two bytes are data itemsize and dtype
-        itemsize = struct.unpack(byteorder+'h', header[25:27])[0]
-        self.dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
-        # next 8 or 16 bytes are data shape
-        self.shape = struct.unpack(byteorder+'hhhh', header[27:])[::-1]
-        if self._filesize != len(header) + product(self.shape) * itemsize:
-            # 4 byte format
-            header += self._fh.read(4*2)
-            self.shape = struct.unpack(byteorder+'IIII', header[27:])[::-1]
-            if self._filesize != len(header) + product(self.shape) * itemsize:
-                raise LfdFileError(self, 'file size mismatch')
-        self.axes = 'CZYX'
-
-    def _asarray(self):
-        """Return data as array."""
-        data = numpy.fromfile(self._fh, self.dtype)
-        return data.reshape(*self.shape)
-
-    def _plot(self, figure, **kwargs):
-        """Display images stored in file."""
-        import_tifffile()
-        data = self._asarray()
-        tifffile.imshow(data, figure=figure, title=self._filename,
-                        photometric='MINISBLACK')
-
-
-def save_v3draw(filename, data, byteorder=None, twobytes=False):
-    """Save data to Vaa3D RAW binary file(s).
-
-    Refer to the SimfcsV3draw documentation for the v3draw file format.
-
-    Parameters
-    ----------
-    filename : str
-        Name of file to write.
-    data : array_like
-        Input data of type uint8, uint16, or float32.
-        Up to 5 dimensions ordered 'TCZYX'.
-        Time points are stored in separate files.
-    byteorder : str (optional)
-        Byte order of data in file.
-    twobytes : bool
-        If True, store data shape as int16, else uint32 (default).
-
-    Examples
-    --------
-    >>> data = numpy.arange(1000000).reshape(10, 10, 100, 100).astype('uint16')
-    >>> save_v3draw('_test.v3draw', data, byteorder='<')
-
-    """
-    data = numpy.array(data, order='C', ndmin=5, copy=False)
-    if data.dtype.char not in 'BHf':
-        raise ValueError('invalid data type %s' % data.dtype)
-    if data.ndim != 5:
-        raise ValueError('data must be up to 5 dimensional')
-    if byteorder is None:
-        byteorder = {'little': '<', 'big': '>'}[sys.byteorder]
-    if byteorder not in '><':
-        raise ValueError('invalid byteorder %s' % byteorder)
-    itemsize = {'B': 1, 'H': 2, 'f': 4}[data.dtype.char]
-    dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
-    header = b'raw_image_stack_by_hpeng'
-    header += {'<': b'L', '>': b'B'}[byteorder]
-    header += struct.pack(byteorder + ['hIIII', 'hhhhh'][bool(twobytes)],
-                          itemsize, *data.shape[:0:-1])
-    if data.shape[0] > 1:
-        fmt = '%%s.t{t:0%i}%%s' % int(math.log(data.shape[0], 10) + 1)
-        filename = fmt % os.path.splitext(filename)
-    for t in range(data.shape[0]):
-        with open(filename.format(t=t), 'wb') as fh:
-            fh.write(header)
-            data[t].astype(dtype).tofile(fh)
 
 
 class SimfcsFbf(LfdFile):
@@ -3512,7 +3217,7 @@ class FlimageBin(LfdFile):
 
     def _init(self):
         """Verify file size is 264000."""
-        if not self._filesize == 264000:
+        if self._filesize != 264000:
             raise LfdFileError(self)
         self.shape = 220, 300
         self.dtype = numpy.dtype('>f4')
@@ -3572,7 +3277,7 @@ class FlieOut(LfdFile):
 
     def _init(self):
         """Verify file size is 264000."""
-        if not self._filesize == 264000:
+        if self._filesize != 264000:
             raise LfdFileError(self)
         self.shape = 220, 300
         self.dtype = numpy.dtype('>f4')
@@ -3678,6 +3383,569 @@ class FliezDb2(LfdFile):
         tif.save(self.asarray(), **kwargs)
 
 
+class BioradPic(LfdFile):
+    """Bio-Rad(tm) multi-dimensional data.
+
+    Bio-Rad PIC files contain single-channel volume data or multi-channel
+    images.
+
+    Image data in uint8 or uint16 format are stored after a 76 byte header.
+    Additional metadata are stored after the image data as 96 byte records
+    ("notes").
+
+    No official file format specification is available.
+    The header structure was obtained from
+    https://forums.ni.com/ni/attachments/ni/200/7567/1/file%20format.pdf
+    This implementation does not currently handle multi-file data or parsing
+    notes.
+
+    Examples
+    --------
+    >>> with BioradPic('biorad.pic') as f:
+    ...     print(f.asarray()[78, 255, 255])
+    8
+
+    """
+    _filepattern = r'.*\.(pic)'
+    _filesizemin = 76
+    _figureargs = {'figsize': (8, 6)}
+
+    def _init(self):
+        """Read header and validate file Id."""
+        (nx, ny, npic, ramp1_min, ramp1_max, notes, byte_format, image_number,
+         name, merged, color1, file_id, ramp2_min, ramp2_max, color2, edited,
+         lens, mag_factor
+         ) = struct.unpack('<hhhhhIhh32shHHhhHhhf6x', self._fh.read(76))
+        if file_id != 12345:
+            raise LfdFileError(self)
+        self.header = dict(
+            name=bytes2str(stripnull(name)).strip(),
+            ramp1_min=ramp1_min, ramp1_max=ramp1_max, color1=color1,
+            ramp2_min=ramp2_min, ramp2_max=ramp2_max, color2=color2,
+            image_number=image_number, lens=lens, mag_factor=mag_factor,
+            edited=edited, merged=merged)
+
+        self.dtype = numpy.dtype('<u1' if byte_format else '<u2')
+        if npic > 1:
+            self.shape = npic, ny, nx
+            self.axes = 'IYX'
+        else:
+            self.shape = ny, nx
+            self.axes = 'YX'
+        self.notes = []
+        self.spacing = ()
+        self.origin = ()
+        if notes != 0:
+            try:
+                self.notes, self.spacing, self.origin = self._notes()
+            except Exception as e:
+                warnings.warn('failed to read PIC notes: %s' % str(e))
+        ndims = len(self.spacing)
+        if npic > 1 and ndims in (2, 3):
+            self.axes = 'ZYX' if ndims == 3 else 'CYX'
+
+    def _notes(self):
+        """Return metadata from notes records in file."""
+        pos = 76 + product(self.shape) * self.dtype.itemsize
+        self._fh.seek(pos)
+        if self._fh.tell() != pos:
+            raise LfdFileError(self, 'file is too small')
+        more = True
+        spacing = []
+        origin = []
+        notes = []
+        while more:
+            level, more, notetype, x, y, note = struct.unpack(
+                '<hi4xhhh80s', self._fh.read(96))
+            note = bytes2str(stripnull(note)).strip()
+            # TODO: parse notes to dict
+            notes.append((note, notetype, level, x, y))
+            if note[:5] == 'AXIS_':
+                index, kind, ori, res = note[5:].split(None, 4)[:4]
+                if kind == '001':
+                    spacing.append(float(res))
+                    origin.append(float(ori))
+        return notes, tuple(spacing), tuple(origin)
+
+    def _asarray(self):
+        """Return image data as array."""
+        self._fh.seek(76)
+        data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
+        return data.reshape(*self.shape)
+
+    def _plot(self, figure, **kwargs):
+        """Display images stored in file."""
+        import_tifffile()
+        data = self._asarray()
+        tifffile.imshow(data, figure=figure, title=self._filename,
+                        photometric='MINISBLACK')
+
+    def _str(self):
+        """Return properties as string."""
+        return '\n'.join(('* %s: %s' % (name, getattr(self, name)))[:79]
+                         for name in ('spacing', 'origin', 'header'))
+
+    def _totiff(self, tif, **kwargs):
+        """Write image data to TIFF file."""
+        update_kwargs(kwargs, metadata={
+            'axes': self.axes, 'spacing': self.spacing, 'origin': self.origin,
+        })
+        tif.save(self.asarray(), **kwargs)
+
+
+def bioradpic_write(filename, data, axis='Z', spacing=None, origin=None,
+                    name=None, lens=1, mag_factor=1.0, image_number=0,
+                    merged=0, edited=0, ramp1_min=0, ramp1_max=0, color1=0,
+                    ramp2_min=0, ramp2_max=0, color2=0):
+    """Save volume or multi-channel data to Bio-Rad(tm) PIC formatted file.
+
+    This implementation does not currently allow writing multi-file datasets,
+    advanced metadata, or color palettes.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file to write.
+    data : array_like
+        Input data, two or three-dimensional of uint18 or uint16.
+    spacing, origin: tuple of float
+        Position and spacing of pixel or voxel in micrometer.
+
+    Refer to the BioradPic header for other parameters.
+
+    Examples
+    --------
+    >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+    >>> bioradpic_write('_test.pic', data)
+
+    """
+    data = numpy.asarray(data)
+    if data.ndim not in (2, 3):
+        raise ValueError('data must be 2 or 3 dimensional')
+    if data.dtype not in ('uint8', 'uint16'):
+        raise ValueError('data type must be uint18 or uint16')
+    if data.ndim == 2:
+        data.shape = 1, data.shape[0], data.shape[1]
+    if name is None:
+        name = os.path.split(filename)[-1]
+    header = struct.pack(
+        '<hhhhhIhh32shHHhhHhhf6b',
+        data.shape[2], data.shape[1], data.shape[0],
+        ramp1_min, ramp1_max, 1, 1 if data.dtype == 'uint8' else 0,
+        image_number, name[:31].encode('latin1'), merged, color1,
+        12345, ramp2_min, ramp2_max, color2, edited, lens, mag_factor,
+        0, 0, 0, 0, 0, 0)
+    axes = (2, 3, 4, 9) if axis == 'Z' else (2, 3, 4)
+    ndim = len(axes) - 1
+    if origin is None:
+        origin = [0.0] * ndim
+    if spacing is None:
+        spacing = [1.0] * ndim
+    notes = [struct.pack(
+        '<hi4bhhh80s', -1, 1, 0, 0, 0, 0, 20, 0, 0,
+        b'AXIS_%i 001 %.6e %.6e microns' % (axes[i], origin[i], spacing[i])
+        ) for i in range(ndim)]
+    notes.append(struct.pack(
+        '<hi4bhhh80s', -1, 0, 0, 0, 0, 0, 20, 0, 0,
+        b'AXIS_%i 011 0.000000e+00 1.000000e+00 RGB channel' % axes[-1]))
+    with open(filename, 'wb') as fh:
+        fh.write(header)
+        data.tofile(fh)
+        fh.write(b''.join(notes))
+
+
+class Ccp4Map(LfdFile):
+    """CCP4 volume data.
+
+    CCP4 MAP files contain 3D volume data. It is used by the Electron
+    Microscopy Data Bank to store electron density maps.
+    <http://emdatabank.org/mapformat.html>
+    <http://www.ccp4.ac.uk/html/maplib.html>
+    <ftp://ftp.wwpdb.org/pub/emdb/doc/map_format/EMDB_mapFormat_v1.0.pdf>
+
+    Attributes
+    ----------
+    shape : tuple of 3 int
+        Shape of data array contained in file.
+    start : tuple of 3 int
+        Position of first section, row, and column (voxel grid units).
+    cell_interval : tuple of 3 int
+        Intervals per unit cell repeat along Z, Y, X.
+    cell_length : tuple of 3 float
+        Unit Cell repeats along Z, Y, X in Angstroms.
+    cell_angle : tuple of 3 float
+        Unit Cell angles (alpha, beta, gamma) in degrees.
+    map_src : tuple of 3 int
+        Relationship of Z, Y, X axes to sections, rows, columns
+    density_min, density_max, density_mean: float
+        Minimum, maximum, average density.
+    density_rms : float
+        Rms deviation of map from mean density.
+    spacegoup : int
+        IUCr space group number (1-230).
+    skew_matrix, skew_translation : ndarray or None
+        Skew matrix and translation vector (if any, else None).
+    symboltable : list of byte strings
+       Symmetry records as defined in International Tables.
+
+    Examples
+    --------
+    >>> with Ccp4Map('ccp4.map') as f:
+    ...     print(f.asarray()[100, 100, 100])
+    1.0
+
+    """
+    _filepattern = r'.*\.(map|ccp4)'
+    _filesizemin = 1024 + 80
+    _dtypes = {0: 'i1', 1: 'i2', 2: 'f4', 4: 'q8', 5: 'i1'}
+
+    def _init(self):
+        """Read CCP4 file header and symboltable."""
+        header = self._fh.read(1024)
+        if header[208:212] not in (b'MAP ', b'PAM\x00', b'MAP\x00'):
+            raise LfdFileError(self, ' %s' % header[:32])
+        try:
+            (nc, nr, ns,
+             mode,  # data type
+             ncstart, nrstart, nsstart,
+             nx, ny, nz,
+             x_length, y_length, z_length,
+             alpha, beta, gamma,
+             mapc, mapr, maps,
+             self.density_min, self.density_max, self.density_mean,
+             self.spacegoup,
+             nsymbt,  # number of bytes used for storing symmetry operators
+             skew_matrix_flag,
+             S11, S12, S13, S21, S22, S23, S31, S32, S33,
+             T1, T2, T3,
+             # extra,
+             map_,  # b'MAP '
+             machst,  # machine stamp,
+             self.density_rms,
+             nlabl,  # number of labels used
+             L0, L1, L2, L3, L4, L5, L6, L7, L8, L9
+             ) = struct.unpack('3ii3i3i3f3f3i3fiii9f3f60x4s4sfi'
+                               '80s80s80s80s80s80s80s80s80s80s', header)
+        except struct.error as e:
+            raise LfdFileError(self, e)
+        try:
+            # machst = header[212:216]
+            byteorder = {b'DA\x00\x00': '<', b'\x11\x11\x00\x00': '>'}[machst]
+        except KeyError:
+            byteorder = '='
+            warnings.warn('Ccp4Map: unknown machine stamp: %s' % machst)
+        try:
+            self.dtype = byteorder + Ccp4Map._dtypes[mode]
+        except KeyError:
+            raise LfdFileError(self, 'unknown mode: %s' % mode)
+        self.shape = ns, nr, nc
+        self.start = nsstart, nrstart, ncstart
+        self.cell_interval = nz, ny, nx
+        self.cell_length = z_length, y_length, x_length
+        self.cell_angle = alpha, beta, gamma
+        self.map_src = maps, mapr, mapc
+        if skew_matrix_flag != 0:
+            self.skew_translation = numpy.array([T1, T2, T3], 'float64')
+            self.skew_matrix = numpy.array([[S11, S12, S13],
+                                            [S21, S22, S23],
+                                            [S31, S32, S33]], 'float64')  # .T?
+        else:
+            self.skew_translation = None
+            self.skew_matrix = None
+        if 0 <= nlabl <= 10:
+            self.labels = [stripnull(lbl) for lbl in
+                           (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9)[:nlabl]]
+        else:
+            self.labels = []
+        if nsymbt < 0 or nsymbt % 80:
+            raise LfdFileError(self, 'invalid symbol table size: %i' % nsymbt)
+        self.symboltable = [stripnull(self._fh.read(80))
+                            for _ in range(nsymbt // 80)]
+        self.axes = 'ZYX'
+
+    def _asarray(self, memmap=False):
+        """Return volume data as numpy array.
+
+        Parameters
+        ----------
+        memmap : bool
+            If True, use numpy.memmap to read array.
+
+        """
+        if memmap:
+            return numpy.memmap(self._fh, dtype=self.dtype, mode='r',
+                                offset=self._pos, shape=self.shape)
+        data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
+        return data.reshape(self.shape)
+
+    def _str(self):
+        """Return additional information about file."""
+        return '* cell length: %s' % (self.cell_length,)
+
+
+def ccp4map_write(filename, data, start=(0, 0, 0), cell_interval=None,
+                  cell_length=None, cell_angle=(90, 90, 90), map_src=(3, 2, 1),
+                  density=None, density_rms=0, spacegroup=1,
+                  skew_matrix=None, skew_translation=None, symboltable=b'',
+                  labels=(b'Created by lfdfiles.py', )):
+    """Save 3D volume data to CCP4 MAP formatted file.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file to write.
+    data : 3D array_like
+        Input volume.
+
+    Refer to the Ccp4Map attributes for other parameters.
+
+    Examples
+    --------
+    >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('f4')
+    >>> ccp4map_write('_test.ccp4', data)
+
+    """
+    data = numpy.asarray(data)
+    if data.ndim != 3:
+        raise ValueError('data must be 3 dimensional')
+    try:
+        mode = {'i1': 0, 'i2': 1, 'f4': 2, 'q8': 4}[data.dtype.str[-2:]]
+    except KeyError:
+        raise ValueError('dtype not supported by MAP format')
+    if cell_interval is None:
+        cell_interval = data.shape
+    if cell_length is None:
+        cell_length = data.shape  # ?
+    if density is None:
+        density = numpy.min(data), numpy.max(data), numpy.mean(data)
+    if skew_matrix is None or skew_translation is None:
+        skew_matrix_flag = 0
+        S = numpy.zeros((3, 3))
+        T = numpy.zeros(3)
+    else:
+        skew_matrix_flag = 1
+        S = numpy.array(skew_matrix)
+        T = numpy.array(skew_translation)
+    assert S.shape == (3, 3)
+    assert T.shape == (3,)
+    labels = list(labels)[:10] if labels else []
+    nlabl = len(labels)
+    labels = [l[:79] for l in labels]
+    labels.extend(b'' for _ in range(10 - nlabl))
+
+    header = struct.pack(
+        '3ii3i3i3f3f3i3fiii9f3f60x4s4sfi80s80s80s80s80s80s80s80s80s80s',
+        data.shape[2], data.shape[1], data.shape[0],
+        mode,
+        start[2], start[1], start[0],
+        cell_interval[2], cell_interval[1], cell_interval[0],
+        cell_length[2], cell_length[1], cell_length[0],
+        cell_angle[0], cell_angle[1], cell_angle[2],
+        map_src[2], map_src[1], map_src[0],
+        density[0], density[1], density[2],
+        spacegroup,
+        len(symboltable),
+        skew_matrix_flag,
+        S[0, 0], S[0, 1], S[0, 2],
+        S[1, 0], S[1, 1], S[1, 2],
+        S[2, 0], S[2, 1], S[2, 2],
+        T[0], T[1], T[2],
+        # extra,
+        b'MAP ',
+        {'little': b'DA\x00\x00', 'big': b'\x11\x11\x00\x00'}[sys.byteorder],
+        density_rms,
+        len(labels),
+        labels[0], labels[1], labels[2], labels[3], labels[4],
+        labels[5], labels[6], labels[7], labels[8], labels[9],
+    )
+    with open(filename, 'wb') as fh:
+        fh.write(header)
+        fh.write(symboltable)
+        data.tofile(fh)
+
+
+class Vaa3dRaw(LfdFile):
+    """Vaa3D multi-channel volume data.
+
+    Vaa3D RAW files contain 4D CZYX multi-channel volume data.
+
+    The data is stored C-contiguously as uint8, uint16 or float32 in little
+    or big-endian byte order, after a header defining data type, endianess,
+    and shape.
+
+    Examples
+    --------
+    >>> with Vaa3dRaw('vaa3d.v3draw') as f:
+    ...     print(f.asarray()[2, 100, 100, 100])
+    138
+
+    """
+    _filepattern = r'.*\.(v3draw|raw)'
+    _filesizemin = 24 + 1 + 2 + 4*2  # 2 byte format
+    _figureargs = {'figsize': (8, 8)}
+
+    def _init(self):
+        """Read header and validate file size."""
+        # read 2 byte format header
+        header = self._fh.read(24 + 1 + 2 + 4*2)
+        # first 24 bytes are 'raw_image_stack_by_hpeng'
+        if not header.startswith(b'raw_image_stack_by_hpeng'):
+            raise LfdFileError(self)
+        # next byte is byte order
+        byteorder = {b'B': '>', b'L': '<'}[header[24:25]]
+        # next two bytes are data itemsize and dtype
+        itemsize = struct.unpack(byteorder+'h', header[25:27])[0]
+        self.dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
+        # next 8 or 16 bytes are data shape
+        self.shape = struct.unpack(byteorder+'hhhh', header[27:])[::-1]
+        if self._filesize != len(header) + product(self.shape) * itemsize:
+            # 4 byte format
+            header += self._fh.read(4*2)
+            self.shape = struct.unpack(byteorder+'IIII', header[27:])[::-1]
+            if self._filesize != len(header) + product(self.shape) * itemsize:
+                raise LfdFileError(self, 'file size mismatch')
+        self.axes = 'CZYX'
+
+    def _asarray(self):
+        """Return data as array."""
+        data = numpy.fromfile(self._fh, self.dtype)
+        return data.reshape(*self.shape)
+
+    def _plot(self, figure, **kwargs):
+        """Display images stored in file."""
+        import_tifffile()
+        data = self._asarray()
+        tifffile.imshow(data, figure=figure, title=self._filename,
+                        photometric='MINISBLACK')
+
+
+def vaa3draw_write(filename, data, byteorder=None, twobytes=False):
+    """Save data to Vaa3D RAW binary file(s).
+
+    Refer to the Vaa3dRaw documentation for the v3draw file format.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file to write.
+    data : array_like
+        Input data of type uint8, uint16, or float32.
+        Up to 5 dimensions ordered 'TCZYX'.
+        Time points are stored in separate files.
+    byteorder : str (optional)
+        Byte order of data in file.
+    twobytes : bool
+        If True, store data shape as int16, else uint32 (default).
+
+    Examples
+    --------
+    >>> data = numpy.arange(1000000).reshape(10, 10, 100, 100).astype('uint16')
+    >>> vaa3draw_write('_test.v3draw', data, byteorder='<')
+
+    """
+    data = numpy.array(data, order='C', ndmin=5, copy=False)
+    if data.dtype.char not in 'BHf':
+        raise ValueError('invalid data type %s' % data.dtype)
+    if data.ndim != 5:
+        raise ValueError('data must be up to 5 dimensional')
+    if byteorder is None:
+        byteorder = {'little': '<', 'big': '>'}[sys.byteorder]
+    if byteorder not in '><':
+        raise ValueError('invalid byteorder %s' % byteorder)
+    itemsize = {'B': 1, 'H': 2, 'f': 4}[data.dtype.char]
+    dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
+    header = b'raw_image_stack_by_hpeng'
+    header += {'<': b'L', '>': b'B'}[byteorder]
+    header += struct.pack(byteorder + ['hIIII', 'hhhhh'][bool(twobytes)],
+                          itemsize, *data.shape[:0:-1])
+    if data.shape[0] > 1:
+        fmt = '%%s.t{t:0%i}%%s' % int(math.log(data.shape[0], 10) + 1)
+        filename = fmt % os.path.splitext(filename)
+    for t in range(data.shape[0]):
+        with open(filename.format(t=t), 'wb') as fh:
+            fh.write(header)
+            data[t].astype(dtype).tofile(fh)
+
+
+class VoxxMap(LfdFile):
+    """Voxx color palette.
+
+    Voxx map files contain a single RGB color palette, stored as 256x4
+    whitespace separated integers (0..255) in an ASCII file.
+
+    Examples
+    --------
+    >>> with VoxxMap('voxx.map') as f:
+    ...     print(f.asarray()[100])
+    [255 227 155 237]
+
+    """
+    _filemode = FILEMODE
+    _filepattern = r'.*\.map'
+    _figureargs = {'figsize': (6, 1)}
+
+    def _init(self):
+        """Verify file starts with numbers."""
+        try:
+            for i in self._fh.read(32).strip().split():
+                if 0 <= int(i) <= 255:
+                    continue
+                raise ValueError('number out of range')
+        except Exception:
+            raise LfdFileError(self)
+        self.shape = 256, 3
+        self.dtype = numpy.dtype('u1')
+        self.axes = 'XS'
+
+    def _asarray(self):
+        """Return palette data as (256, 3) shaped array of uint8."""
+        self._fh.seek(0)
+        data = numpy.fromfile(self._fh, 'u1', 1024, sep=' ')
+        return data.reshape(256, 4)
+
+    def _totiff(self, tif, **kwargs):
+        """Write palette to TIFF file."""
+        kwargs.update(photometric='rgb', planarconfig='contig')
+        data = numpy.expand_dims(self.asarray(), axis=0)
+        tif.save(data, **kwargs)
+
+    def _plot(self, figure):
+        """Display palette stored in file."""
+        pal = self.asarray().reshape(1, 256, -1)
+        ax = figure.add_subplot(1, 1, 1)
+        ax.set_title(str(self))
+        ax.yaxis.set_visible(False)
+        ax.imshow(pal, aspect=20, origin='lower', interpolation='nearest')
+
+    def __str__(self):
+        """Return name of palette."""
+        return self._filename
+
+
+def voxxmap_write(filename, data):
+    """Save data to Voxx map file(s).
+
+    Refer to the VoxxMap documentation for the file format.
+
+    Parameters
+    ----------
+    filename : str
+        Name of file to write.
+    data : array_like
+        Input data of shape (256, 4) and type uint8.
+
+    Examples
+    --------
+    >>> data = numpy.repeat(numpy.arange(256, dtype='uint8'), 4).reshape(-1, 4)
+    >>> voxxmap_write('_test_vox.map', data)
+
+    """
+    data = numpy.array(data, copy=False)
+    if data.dtype != 'uint8' or data.shape != (256, 4):
+        raise ValueError('not a 256x4 uint8 array')
+    numpy.savetxt(filename, data, fmt='%.0f')
+
+
 class TiffFile(LfdFile):
     """TIFF file.
 
@@ -3734,12 +4002,43 @@ class TiffFile(LfdFile):
         return getattr(self._tiff, name)
 
 
-def stripnull(s):
-    """Return string truncated at the first NULL character."""
-    try:
-        return s[:s.index(b'\x00')]
-    except ValueError:
-        return s
+def convert2tiff(files, compress=0, verbose=True, skip=None):
+    """Convert image data from LfdFile(s) to TIFF files.
+
+    Examples
+    --------
+    >>> convert2tiff('flimfast.flif')
+    flimfast.flif - FlimfastFlif
+
+    """
+    import_tifffile()
+    if skip is None:
+        skip = SimfcsBin, SimfcsRaw, SimfcsCyl, FliezI16
+
+    registry = [cls for cls in LfdFileRegistry.classes
+                if cls not in skip and cls._totiff != LfdFile._totiff]
+    files = LfdFileSequence(files, readfunc=LfdFile).files
+    for file in files:
+        if verbose:
+            print(file, end=' - ')
+            sys.stdout.flush()
+        for cls in registry:
+            try:
+                with cls(file, validate=True) as fh:
+                    fh.totiff(compress=compress)
+                if verbose:
+                    print(cls.__name__)
+                break
+            except LfdFileError:
+                pass
+            except Exception as e:
+                if verbose:
+                    print(e, end=' - ')
+        else:
+            if verbose:
+                print('failed')
+        registry.remove(cls)
+        registry.insert(0, cls)
 
 
 def determine_shape(shape, dtype, size, validate=True, exception=LfdFileError):
@@ -3782,6 +4081,14 @@ def determine_shape(shape, dtype, size, validate=True, exception=LfdFileError):
         t = count // product(i for i in shape if i > 0)
         shape = tuple((i if i > 0 else t) for i in shape)
     return shape
+
+
+def stripnull(s):
+    """Return string truncated at the first NULL character."""
+    try:
+        return s[:s.index(b'\x00')]
+    except ValueError:
+        return s
 
 
 def product(iterable):
@@ -3898,45 +4205,6 @@ def askopenfilename(**kwargs):
     return filenames
 
 
-def save_tiff(files, compress=0, verbose=True, skip=None):
-    """Save image data from LFD to TIFF files.
-
-    Examples
-    --------
-    >>> save_tiff('flimfast.flif')
-    flimfast.flif - FlimfastFlif
-
-    """
-    import_tifffile()
-    if skip is None:
-        skip = SimfcsBin, SimfcsRaw, SimfcsCyl, FliezI16
-
-    registry = [cls for cls in LfdFileRegistry.classes
-                if cls not in skip and cls._totiff != LfdFile._totiff]
-    files = LfdFileSequence(files, readfunc=LfdFile).files
-    for file in files:
-        if verbose:
-            print(file, end=' - ')
-            sys.stdout.flush()
-        for cls in registry:
-            try:
-                with cls(file, validate=True) as fh:
-                    fh.totiff(compress=compress)
-                if verbose:
-                    print(cls.__name__)
-                break
-            except LfdFileError:
-                pass
-            except Exception as e:
-                if verbose:
-                    print(e, end=' - ')
-        else:
-            if verbose:
-                print('failed')
-        registry.remove(cls)
-        registry.insert(0, cls)
-
-
 def main():
     """Command line usage main function."""
     import click
@@ -3972,7 +4240,7 @@ def main():
             files = askopenfilename(title='Select LFD file(s)', multiple=True,
                                     filetypes=[('All files', '*')])
         if files:
-            save_tiff(files, compress=compress)
+            convert2tiff(files, compress=compress)
 
     @cli.command(help='View data in file.')
     @click.argument('files', nargs=-1, type=click.Path(dir_okay=False))
