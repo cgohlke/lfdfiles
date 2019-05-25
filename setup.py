@@ -21,8 +21,8 @@ description = re.search(r'"""(.*)\.(?:\r\n|\r|\n)', code).groups()[0]
 readme = re.search(r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}from', code,
                    re.MULTILINE | re.DOTALL).groups()[0]
 
-readme = '\n'.join([description, '=' * len(description)]
-                   + readme.splitlines()[1:])
+readme = '\n'.join([description, '=' * len(description)] +
+                   readme.splitlines()[1:])
 
 license = re.search(r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""', code,
                     re.MULTILINE | re.DOTALL).groups()[0]
@@ -72,8 +72,8 @@ setup_args = dict(
     url='https://www.lfd.uci.edu/~gohlke/',
     python_requires='>=2.7',
     install_requires=['numpy>=1.11.3', 'click'],
-    setup_requires=['setuptools>=18.0', 'numpy>=1.11.3'],  # , 'cython>=0.29.0'
-    extras_require={'all': ['matplotlib>=2.2', 'tifffile>=2019.1.1']},
+    setup_requires=['setuptools>=18.0', 'numpy>=1.11.3'],  # , 'cython>=0.29.7'
+    extras_require={'all': ['matplotlib>=2.2', 'tifffile>=2019.5.22']},
     tests_require=['pytest'],
     packages=['lfdfiles'],
     entry_points={'console_scripts': ['lfdfiles=lfdfiles.__main__:main']},
