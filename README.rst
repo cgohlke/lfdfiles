@@ -4,7 +4,15 @@ Laboratory for Fluorescence Dynamics (LFD) file formats
 Lfdfiles is a Python library and console script for reading, writing,
 converting, and viewing many of the proprietary file formats used to store
 experimental data and metadata at the `Laboratory for Fluorescence Dynamics
-<https://www.lfd.uci.edu/>`_.
+<https://www.lfd.uci.edu/>`_. For example:
+
+* SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
+* GLOBALS LIF, ASCII
+* CCP4 MAP
+* Vaa3D RAW
+* Bio-Rad(r) PIC
+* Vista IFLI
+* FlimFast FLIF
 
 For command line usage run ``python -m lfdfiles --help``
 
@@ -16,21 +24,23 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: 3-clause BSD
 
-:Version: 2019.5.22
+:Version: 2019.7.2
 
 Requirements
 ------------
 * `CPython 2.7 or 3.5+ <https://www.python.org>`_
 * `Numpy 1.11.3 <https://www.numpy.org>`_
+* `Tifffile 2019.7.2 <https://pypi.org/project/tifffile/>`_
 * `Matplotlib 2.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
-* `Tifffile 2019.5.22 <https://pypi.org/project/tifffile/>`_
-  (optional for reading and writing TIFF)
 * `Click 7.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2019.7.2
+   Require tifffile 2019.7.2.
+   Remove some utility functions.
 2019.5.22
     Read and write Bio-Rad(tm) PIC files.
     Read and write Voxx MAP palette files.
@@ -85,8 +95,8 @@ available in separate, human readable journal files (.jrn).
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
 
-Software
---------
+References
+----------
 The following software is referenced in this module:
 
 (1)  `SimFCS <https://www.lfd.uci.edu/globals/>`_, a.k.a. Globals for
