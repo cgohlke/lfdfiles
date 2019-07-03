@@ -54,13 +54,14 @@ except ImportError:
     ext = '.c'
 
 ext_modules = [
-    Extension('lfdfiles._lfdfiles',
-              ['lfdfiles/_lfdfiles' + ext],
-              extra_compile_args=['/openmp' if sys.platform == 'win32' else
-                                  '-fopenmp'],
-              extra_link_args=['' if sys.platform == 'win32' else
-                               '-fopenmp']
-              )]
+    Extension(
+        'lfdfiles._lfdfiles',
+        ['lfdfiles/_lfdfiles' + ext],
+        extra_compile_args=['/openmp' if sys.platform == 'win32' else
+                            '-fopenmp'],
+        extra_link_args=['' if sys.platform == 'win32' else '-fopenmp']
+    ),
+]
 
 setup_args = dict(
     name='lfdfiles',
@@ -71,9 +72,16 @@ setup_args = dict(
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
     python_requires='>=2.7',
-    install_requires=['numpy>=1.11.3', 'click'],
-    setup_requires=['setuptools>=18.0', 'numpy>=1.11.3'],  # , 'cython>=0.29.7'
-    extras_require={'all': ['matplotlib>=2.2', 'tifffile>=2019.5.22']},
+    install_requires=[
+        'numpy>=1.11.3',
+        'tifffile>=2019.7.2',
+        'click',
+    ],
+    setup_requires=[
+        'setuptools>=18.0',
+        'numpy>=1.11.3',
+    ],
+    extras_require={'all': ['matplotlib>=2.2', ]},
     tests_require=['pytest'],
     packages=['lfdfiles'],
     entry_points={'console_scripts': ['lfdfiles=lfdfiles.__main__:main']},
@@ -93,8 +101,8 @@ setup_args = dict(
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
-        ],
-    )
+    ],
+)
 
 try:
     if '--universal' in sys.argv:
