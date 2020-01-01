@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # lfdfiles/__main__.py
 
 """Lfdfiles package command line script."""
