@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # _lfdfiles.pyx
 # distutils: language = c
 # cython: language_level = 3
@@ -7,24 +6,22 @@
 # cython: cdivision=True
 # cython: nonecheck=False
 
-# Copyright (c) 2012-2019, Christoph Gohlke
-# Copyright (c) 2012-2019, The Regents of the University of California
-# Produced at the Laboratory for Fluorescence Dynamics.
+# Copyright (c) 2012-2020, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
 #
-# * Redistributions of source code must retain the above copyright notice,
-#   this list of conditions and the following disclaimer.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
 #
-# * Redistributions in binary form must reproduce the above copyright notice,
-#   this list of conditions and the following disclaimer in the documentation
-#   and/or other materials provided with the distribution.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
 #
-# * Neither the name of the copyright holder nor the names of its
-#   contributors may be used to endorse or promote products derived from
-#   this software without specific prior written permission.
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -46,13 +43,13 @@
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:License: 3-clause BSD
+:License: BSD 3-Clause
 
-:Version: 2019.4.22
+:Version: 2020.1.1
 
 """
 
-__version__ = '2019.4.22'
+__version__ = '2020.1.1'
 
 
 from cython.parallel import parallel, prange
@@ -115,7 +112,7 @@ def simfcsfbd_decode(
                 win = <int>(decoder_table[c, win])
                 if win >= 0:
                     bins_out[c, i] = <int8_t>(
-                        (pmax-1 - (pcc + win*pmax_win) % pmax) // pdiv)
+                        (pmax-1 - (pcc + win * pmax_win) % pmax) // pdiv)
                 else:
                     bins_out[c, i] = -1  # no event
             else:
