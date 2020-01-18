@@ -22,22 +22,32 @@ For command line usage run ``python -m lfdfiles --help``
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
-:License: 3-clause BSD
+:License: BSD 3-Clause
 
-:Version: 2019.7.2
+:Version: 2020.1.1
 
 Requirements
 ------------
-* `CPython 2.7 or 3.5+ <https://www.python.org>`_
-* `Numpy 1.11.3 <https://www.numpy.org>`_
+* `CPython >= 3.6 <https://www.python.org>`_
+* `Numpy 1.14 <https://www.numpy.org>`_
 * `Tifffile 2019.7.2 <https://pypi.org/project/tifffile/>`_
-* `Matplotlib 2.2 <https://pypi.org/project/matplotlib/>`_
+* `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
+* `Oiffile 2020.1.1 <https://pypi.org/project/oiffile />`_ (optional)
+* `Netpbmfile 2020.1.1 <https://pypi.org/project/netpbmfile />`_ (optional)
+* `Matplotlib 3.1 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
 * `Click 7.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2020.1.1
+    Read CZI files via czifile module.
+    Read Olympus Image files via oiffile module.
+    Read Netpbm formats via netpbmfile module.
+    Add B64, Z64, and I64 write functions.
+    Remove support for Python 2.7 and 3.5.
+    Update copyright.
 2019.7.2
    Require tifffile 2019.7.2.
    Remove some utility functions.
@@ -57,9 +67,9 @@ Revisions
     Command line interface for plotting and converting to TIFF.
     Registry of LfdFile classes.
     Write image and metadata to TIFF.
-    Read TIFF files.
+    Read TIFF files via tifffile module.
 2016.3.29
-    Write R64 files.
+    Add R64 write function.
 2016.3.14
     Read and write Vaa3D RAW volume files.
 2015.3.02
@@ -81,9 +91,9 @@ Lfdfiles is currently developed, built, and tested on Windows only.
 
 The API is not stable yet and might change between revisions.
 
-The `Microsoft Visual C++ Redistributable Packages
-<https://support.microsoft.com/en-us/help/2977003/
-the-latest-supported-visual-c-downloads>`_ are required on Windows.
+The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015, 2017
+and 2019 <https://support.microsoft.com/en-us/help/2977003/
+the-latest-supported-visual-c-downloads>`_ is required on Windows.
 
 Many of the LFD's file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
@@ -95,40 +105,62 @@ available in separate, human readable journal files (.jrn).
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
 
+Examples
+--------
+
+Create a Bio-Rad PIC file from a numpy array:
+
+>>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+>>> bioradpic_write('_biorad.pic', data)
+
+Read the volume data from the PIC file as numpy array, and access metadata:
+
+>>> with BioradPic('_biorad.pic') as pic:
+...     data = pic.asarray()
+...     pic.shape
+...     pic.spacing
+(100, 100, 100)
+(1.0, 1.0, 1.0)
+
+Convert the PIC file to a compressed TIFF file:
+
+>>> BioradPic('_biorad.pic').totiff('_biorad.tif', compress=6)
+
+
 References
 ----------
 The following software is referenced in this module:
 
-(1)  `SimFCS <https://www.lfd.uci.edu/globals/>`_, a.k.a. Globals for
-     Images, is software for fluorescence image acquisition, analysis, and
-     simulation, developed by Enrico Gratton at UCI.
-(2)  `Globals <https://www.lfd.uci.edu/globals/>`_, a.k.a. Globals for
-     Spectroscopy, is software for the analysis of multiple files from
-     fluorescence spectroscopy, developed by Enrico Gratton at UIUC and UCI.
-(3)  ImObj is software for image analysis, developed by LFD at UIUC.
-     Implemented on Win16.
-(4)  `FlimFast <https://www.lfd.uci.edu/~gohlke/flimfast/>`_ is software for
-     frequency-domain, full-field, fluorescence lifetime imaging at video
-     rate, developed by Christoph Gohlke at UIUC.
-(5)  FLImage is software for frequency-domain, full-field, fluorescence
-     lifetime imaging, developed by Christoph Gohlke at UIUC.
-     Implemented in LabVIEW.
-(6)  FLIez is software for frequency-domain, full-field, fluorescence
-     lifetime imaging, developed by Glen Redford at UIUC.
-(7)  Flie is software for frequency-domain, full-field, fluorescence
-     lifetime imaging, developed by Peter Schneider at MPIBPC.
-     Implemented on a Sun UltraSPARC.
-(8)  FLOP is software for frequency-domain, cuvette, fluorescence lifetime
-     measurements, developed by Christoph Gohlke at MPIBPC.
-     Implemented in LabVIEW.
-(9)  `VistaVision <http://www.iss.com/microscopy/software/vistavision.html>`_
-     is commercial software for instrument control, data acquisition and data
-     processing by ISS Inc (Champaign, IL).
-(10) `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
-     data visualization and analysis, developed by the Hanchuan Peng group at
-     the Allen Institute.
-(11) `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
-     for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
-     University.
-(12) `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
-     No. 4, is software for macromolecular X-Ray crystallography.
+1.  `SimFCS <https://www.lfd.uci.edu/globals/>`_, a.k.a. Globals for
+    Images, is software for fluorescence image acquisition, analysis, and
+    simulation, developed by Enrico Gratton at UCI.
+2.  `Globals <https://www.lfd.uci.edu/globals/>`_, a.k.a. Globals for
+    Spectroscopy, is software for the analysis of multiple files from
+    fluorescence spectroscopy, developed by Enrico Gratton at UIUC and UCI.
+3.  ImObj is software for image analysis, developed by LFD at UIUC.
+    Implemented on Win16.
+4.  `FlimFast <https://www.lfd.uci.edu/~gohlke/flimfast/>`_ is software for
+    frequency-domain, full-field, fluorescence lifetime imaging at video
+    rate, developed by Christoph Gohlke at UIUC.
+5.  FLImage is software for frequency-domain, full-field, fluorescence
+    lifetime imaging, developed by Christoph Gohlke at UIUC.
+    Implemented in LabVIEW.
+6.  FLIez is software for frequency-domain, full-field, fluorescence
+    lifetime imaging, developed by Glen Redford at UIUC.
+7.  Flie is software for frequency-domain, full-field, fluorescence
+    lifetime imaging, developed by Peter Schneider at MPIBPC.
+    Implemented on a Sun UltraSPARC.
+8.  FLOP is software for frequency-domain, cuvette, fluorescence lifetime
+    measurements, developed by Christoph Gohlke at MPIBPC.
+    Implemented in LabVIEW.
+9.  `VistaVision <http://www.iss.com/microscopy/software/vistavision.html>`_
+    is commercial software for instrument control, data acquisition and data
+    processing by ISS Inc (Champaign, IL).
+10. `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
+    data visualization and analysis, developed by the Hanchuan Peng group at
+    the Allen Institute.
+11. `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
+    for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
+    University.
+12. `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
+    No. 4, is software for macromolecular X-Ray crystallography.
