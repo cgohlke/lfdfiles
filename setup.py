@@ -17,14 +17,21 @@ version = re.search(r"__version__ = '(.*?)'", code).groups()[0]
 
 description = re.search(r'"""(.*)\.(?:\r\n|\r|\n)', code).groups()[0]
 
-readme = re.search(r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}__version__',
-                   code, re.MULTILINE | re.DOTALL).groups()[0]
+readme = re.search(
+    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}__version__',
+    code,
+    re.MULTILINE | re.DOTALL,
+).groups()[0]
 
-readme = '\n'.join([description, '=' * len(description)] +
-                   readme.splitlines()[1:])
+readme = '\n'.join(
+    [description, '=' * len(description)] + readme.splitlines()[1:]
+)
 
-license = re.search(r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""', code,
-                    re.MULTILINE | re.DOTALL).groups()[0]
+license = re.search(
+    r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""',
+    code,
+    re.MULTILINE | re.DOTALL,
+).groups()[0]
 
 license = license.replace('# ', '').replace('#', '')
 
@@ -38,10 +45,12 @@ if 'sdist' in sys.argv:
 
 class build_ext(_build_ext):
     """Delay import numpy until build."""
+
     def finalize_options(self):
         _build_ext.finalize_options(self)
         __builtins__.__NUMPY_SETUP__ = False
         import numpy
+
         self.include_dirs.append(numpy.get_include())
 
 
@@ -49,6 +58,7 @@ class build_ext(_build_ext):
 # https://github.com/pypa/setuptools/issues/1317
 try:
     import Cython  # noqa
+
     ext = '.pyx'
 except ImportError:
     ext = '.c'
@@ -57,10 +67,11 @@ ext_modules = [
     Extension(
         'lfdfiles._lfdfiles',
         ['lfdfiles/_lfdfiles' + ext],
-        extra_compile_args=['/openmp' if sys.platform == 'win32' else
-                            '-fopenmp'],
-        extra_link_args=['' if sys.platform == 'win32' else '-fopenmp']
-    ),
+        extra_compile_args=[
+            '/openmp' if sys.platform == 'win32' else '-fopenmp'
+        ],
+        extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
+    )
 ]
 
 setup_args = dict(
@@ -71,22 +82,20 @@ setup_args = dict(
     author='Christoph Gohlke',
     author_email='cgohlke@uci.edu',
     url='https://www.lfd.uci.edu/~gohlke/',
+    project_urls={
+        'Bug Tracker': 'https://github.com/cgohlke/lfdfiles/issues',
+        'Source Code': 'https://github.com/cgohlke/lfdfiles',
+        # 'Documentation': 'https://',
+    },
     python_requires='>=3.6',
-    install_requires=[
-        'numpy>=1.14.5',
-        'tifffile>=2019.7.2',
-        'click',
-    ],
-    setup_requires=[
-        'setuptools>=18.0',
-        'numpy>=1.14.5',
-    ],
+    install_requires=['numpy>=1.15.1', 'tifffile>=2020.9.3', 'click'],
+    setup_requires=['setuptools>=18.0', 'numpy>=1.15.1'],
     extras_require={
         'all': [
             'matplotlib>=3.1',
             'czifile>=2019.7.2',
-            'oiffile>=2020.1.1',
-            'netpbmfile>=2020.1.1',
+            'oiffile>=2020.9.18',
+            'netpbmfile>=2020.9.18',
         ]
     },
     tests_require=['pytest'],
@@ -103,21 +112,26 @@ setup_args = dict(
         'Operating System :: OS Independent',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
 )
 
 try:
     if '--universal' in sys.argv:
         raise ValueError(
-            'Not building the _lfdfiles Cython extension in universal mode')
-    setup(ext_modules=ext_modules, cmdclass={'build_ext': build_ext},
-          **setup_args)
+            'Not building the _lfdfiles Cython extension in universal mode'
+        )
+    setup(
+        ext_modules=ext_modules,
+        cmdclass={'build_ext': build_ext},
+        **setup_args,
+    )
 except Exception as e:
     warnings.warn(str(e))
     warnings.warn(
         'The _lfdfiles Cython extension module was not built.\n'
-        'Using a fallback module with limited functionality and performance.')
+        'Using a fallback module with limited functionality and performance.'
+    )
     setup(**setup_args)
