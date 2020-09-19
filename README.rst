@@ -24,23 +24,27 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.1.1
+:Version: 2020.9.18
 
 Requirements
 ------------
-* `CPython >= 3.6 <https://www.python.org>`_
-* `Numpy 1.14 <https://www.numpy.org>`_
-* `Tifffile 2019.7.2 <https://pypi.org/project/tifffile/>`_
+* `CPython >= 3.7 <https://www.python.org>`_
+* `Numpy 1.15 <https://www.numpy.org>`_
+* `Tifffile 2020.9.3 <https://pypi.org/project/tifffile/>`_
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-* `Oiffile 2020.1.1 <https://pypi.org/project/oiffile />`_ (optional)
-* `Netpbmfile 2020.1.1 <https://pypi.org/project/netpbmfile />`_ (optional)
-* `Matplotlib 3.1 <https://pypi.org/project/matplotlib/>`_
+* `Oiffile 2020.9.18 <https://pypi.org/project/oiffile />`_ (optional)
+* `Netpbmfile 2020.9.18 <https://pypi.org/project/netpbmfile />`_ (optional)
+* `Matplotlib 3.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
 * `Click 7.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2020.9.18
+    Remove support for Python 3.6 (NEP 29).
+    Support os.PathLike file names.
+    Fix writing contiguous series to TIFF files with tifffile >= 2020.9.3.
 2020.1.1
     Read CZI files via czifile module.
     Read Olympus Image files via oiffile module.
