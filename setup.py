@@ -71,7 +71,15 @@ ext_modules = [
             '/openmp' if sys.platform == 'win32' else '-fopenmp'
         ],
         extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
-    )
+    ),
+    Extension(
+        'lfdfiles._sflim',
+        ['lfdfiles/_sflim' + ext],
+        extra_compile_args=[
+            '/openmp' if sys.platform == 'win32' else '-fopenmp'
+        ],
+        extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
+    ),
 ]
 
 setup_args = dict(
@@ -92,10 +100,10 @@ setup_args = dict(
     setup_requires=['setuptools>=18.0', 'numpy>=1.15.1'],
     extras_require={
         'all': [
-            'matplotlib>=3.1',
+            'matplotlib>=3.2',
             'czifile>=2019.7.2',
             'oiffile>=2020.9.18',
-            'netpbmfile>=2020.9.18',
+            'netpbmfile>=2020.10.18',
         ]
     },
     tests_require=['pytest'],
