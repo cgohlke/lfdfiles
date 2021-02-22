@@ -1,12 +1,12 @@
 # _lfdfiles.pyx
 # distutils: language = c
 # cython: language_level = 3
-# cython: boundscheck=False
-# cython: wraparound=False
-# cython: cdivision=True
-# cython: nonecheck=False
+# cython: boundscheck = False
+# cython: wraparound = False
+# cython: cdivision = True
+# cython: nonecheck = False
 
-# Copyright (c) 2012-2020, Christoph Gohlke
+# Copyright (c) 2012-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,15 +37,12 @@
 
 """Fast implementations for the lfdfiles module.
 
-:Author:
-  `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
+:Author: Christoph Gohlke
 
 :Organization:
   Laboratory for Fluorescence Dynamics. University of California, Irvine
 
 :License: BSD 3-Clause
-
-:Version: 2020.1.1
 
 """
 
