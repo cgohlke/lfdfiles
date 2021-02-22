@@ -1,6 +1,6 @@
 # lfdfiles.py
 
-# Copyright (c) 2012-2020, Christoph Gohlke
+# Copyright (c) 2012-2021, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.9.18
+:Version: 2021.2.22
 
 Requirements
 ------------
@@ -71,6 +71,9 @@ Requirements
 
 Revisions
 ---------
+2021.2.22
+    Add function to decode Spectral FLIM data from Kintex FLIMbox.
+    Relax VistaIfli file version check.
 2020.9.18
     Remove support for Python 3.6 (NEP 29).
     Support os.PathLike file names.
@@ -201,7 +204,7 @@ The following software is referenced in this module:
 
 """
 
-__version__ = '2020.9.18'
+__version__ = '2021.2.22'
 
 __all__ = (
     'LfdFile',
@@ -252,6 +255,9 @@ __all__ = (
     'vaa3draw_write',
     'voxxmap_write',
     'bioradpic_write',
+    'simfcsfbd_histogram',
+    'simfcsfbd_decode',
+    'sflim_decode',
 )
 
 import os
@@ -1876,7 +1882,7 @@ class SimfcsZ64(LfdFile):
         """Read file header."""
         self._skip = 8 if doubleheader else 0
         header = self._decompress_header(self._skip + 8)
-        header = header[self._skip: self._skip + 8]
+        header = header[self._skip : self._skip + 8]
         size, inum = struct.unpack('<ii', header)[:2]
         if not 2 <= size <= maxsize[-1] or not 2 <= inum <= maxsize[0]:
             raise LfdFileError(self, 'image size out of range')
@@ -2519,20 +2525,24 @@ class SimfcsFbd(LfdFile):
     @staticmethod
     def _w4c2():
         # Return parameters to decode 4 windows, 2 channels FlimBox data.
+        # fmt: off
         a = [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
               1, 0, 3, 2, 1, 0, 3, 2, 1, -1, 3, 2, -1, -1, 3, -1],
              [-1, -1, 0, -1, 1, -1, 2, -1, 3, 0, -1, -1, 0, 3, -1, 0,
               1, 2, 2, 1, 2, 1, 1, 2, 3, -1, 0, 3, -1, -1, 3, -1]]
+        # fmt: on
         a = numpy.array(a, 'int16')
         return a, 0x3FF, 0, 0xFF, 0, 0x400, 10, 0xF800, 11
 
     @staticmethod
     def _w4c2_():
         # Return parameters to decode 4 windows, 2 channels, second harmonics.
+        # fmt: off
         a = [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
               1, 0, 3, 2, 1, 0, 3, 2, 1, -1, 3, 2, -1, -1, 3, -1],
              [-1, -1, 0, -1, 1, -1, 2, -1, 3, 0, -1, -1, 0, 3, -1, 0,
               1, 2, 2, 1, 2, 1, 1, 2, 3, -1, 0, 3, -1, -1, 3, -1]]
+        # fmt: on
         a = numpy.array(a, 'int16')
         return a, 0x3FF, 0, 0x3F, 0, 0x400, 10, 0xF800, 11
 
@@ -2751,7 +2761,7 @@ class SimfcsFbd(LfdFile):
             if word_count < 0:
                 data = data[skip_words:word_count]
             else:
-                data = data[skip_words: skip_words + word_count]
+                data = data[skip_words : skip_words + word_count]
 
         bins_out = numpy.empty((self.channels, data.size), dtype='int8')
         times_out = numpy.empty(data.size, dtype='uint64')
@@ -2950,7 +2960,7 @@ class SimfcsFbd(LfdFile):
             result = result[
                 ...,
                 : self.frame_size,
-                self.scanner_line_start: self.scanner_line_start
+                self.scanner_line_start : self.scanner_line_start
                 + self.frame_size,
                 :,
             ]
@@ -3071,11 +3081,19 @@ def simfcsfbd_histogram(
 
 try:
     try:
-        from ._lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa:
+        from ._lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa
     except ImportError:
-        from _lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa:
+        from _lfdfiles import simfcsfbd_histogram, simfcsfbd_decode  # noqa
 except ImportError:
     pass
+
+try:
+    from ._sflim import sflim_decode
+except ImportError:
+
+    def sflim_decode():
+        """Raise ImportError: No module names '_sflim'."""
+        from ._sflim import sflim_decode  # noqa
 
 
 class SimfcsGpSeries(LfdFileSequence):
@@ -3359,6 +3377,7 @@ class VistaIfli(LfdFile):
     real (g) and imaginary (s) parts of the phasor.
     The lifetime array has two samples, the lifetimes calculated from phase
     and modulation (apparent single lifetimes).
+    Additional metadata may be stored in an associated XML file.
 
     Attributes
     ----------
@@ -3377,8 +3396,10 @@ class VistaIfli(LfdFile):
     (1, 2, 1, 128, 128, 2, 3)
     >>> f.totiff('_vista.ifli.tif')
     >>> f.close()
-    >>> assert_array_equal(TiffFile('_vista.ifli.tif').asarray()[0, 0],
-    ...                    data[..., 0, 0])
+    >>> assert_array_equal(
+    ...    TiffFile('_vista.ifli.tif').asarray()[0, 0], data[..., 0, 0]
+    ... )
+
     """
 
     _filepattern = r'.*\.ifli'
@@ -3416,8 +3437,12 @@ class VistaIfli(LfdFile):
         self.header = h = numpy.rec.fromfile(
             self._fh, self._header_t(numfreq), 1, byteorder='<'
         )[0]
-        assert h['version'] == 1
-        assert h['compression'] == 0
+        if h['version'] not in (1, 13):
+            log_warning(f'unrecognized VistaIfli file version {h["version"]}')
+        if h['compression'] != 0:
+            raise NotImplementedError(
+                f'VistaIfli compression {h["compression"]} not supported'
+            )
         self.shape = tuple(int(i) for i in reversed(h['dimensions'])) + (
             numfreq,
         )
@@ -5040,6 +5065,13 @@ def bytes2str(b, encoding=None, errors='strict'):
         return b.decode('utf-8', errors)
     except UnicodeDecodeError:
         return b.decode('cp1252', errors)
+
+
+def log_warning(msg, *args, **kwargs):
+    """Log message with level WARNING."""
+    import logging
+
+    logging.getLogger(__name__).warning(msg, *args, **kwargs)
 
 
 def main():
