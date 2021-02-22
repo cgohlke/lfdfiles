@@ -4,6 +4,8 @@ include pyproject.toml
 
 include lfdfiles/_lfdfiles.c
 include lfdfiles/_lfdfiles.pyx
+include lfdfiles/_sflim.c
+include lfdfiles/_sflim.pyx
 
 exclude tests/*.*
 
