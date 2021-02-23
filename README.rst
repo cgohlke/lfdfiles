@@ -24,7 +24,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2020.9.18
+:Version: 2021.2.22
 
 Requirements
 ------------
@@ -41,6 +41,9 @@ Requirements
 
 Revisions
 ---------
+2021.2.22
+    Add function to decode Spectral FLIM data from Kintex FLIMbox.
+    Relax VistaIfli file version check.
 2020.9.18
     Remove support for Python 3.6 (NEP 29).
     Support os.PathLike file names.
