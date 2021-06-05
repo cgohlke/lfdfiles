@@ -96,7 +96,7 @@ setup_args = dict(
         # 'Documentation': 'https://',
     },
     python_requires='>=3.6',
-    install_requires=['numpy>=1.15.1', 'tifffile>=2020.9.3', 'click'],
+    install_requires=['numpy>=1.15.1', 'tifffile>=2020.9.30', 'click'],
     setup_requires=['setuptools>=18.0', 'numpy>=1.15.1'],
     extras_require={
         'all': [
@@ -123,6 +123,7 @@ setup_args = dict(
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
     ],
 )
 
