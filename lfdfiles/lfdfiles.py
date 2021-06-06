@@ -54,23 +54,31 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.2.22
+:Version: 2021.6.6
 
 Requirements
 ------------
-* `CPython >= 3.7 <https://www.python.org>`_
-* `Numpy 1.15 <https://www.numpy.org>`_
-* `Tifffile 2020.9.3 <https://pypi.org/project/tifffile/>`_
+This release has been tested with the following requirements and dependencies
+(other versions may work):
+
+* `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
+* `Cython 0.29.23 <https://cython.org>`_ (build)
+* `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
+* `Tifffile 2021.4.8 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-* `Oiffile 2020.9.18 <https://pypi.org/project/oiffile />`_ (optional)
-* `Netpbmfile 2020.9.18 <https://pypi.org/project/netpbmfile />`_ (optional)
-* `Matplotlib 3.2 <https://pypi.org/project/matplotlib/>`_
+* `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
+* `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
+* `Matplotlib 3.4.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
-* `Click 7.0 <https://pypi.python.org/pypi/click>`_
+* `Click 8.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2021.6.6
+    Fix unclosed file warnings.
+    Replace TIFF compress with compression parameter (breaking).
+    Remove compress option from command line interface (breaking).
 2021.2.22
     Add function to decode Spectral FLIM data from Kintex FLIMbox.
     Relax VistaIfli file version check.
@@ -144,7 +152,6 @@ order.
 
 Examples
 --------
-
 Create a Bio-Rad PIC file from a numpy array:
 
 >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
@@ -152,16 +159,17 @@ Create a Bio-Rad PIC file from a numpy array:
 
 Read the volume data from the PIC file as numpy array, and access metadata:
 
->>> with BioradPic('_biorad.pic') as pic:
-...     data = pic.asarray()
-...     pic.shape
-...     pic.spacing
+>>> with BioradPic('_biorad.pic') as f:
+...     f.shape
+...     f.spacing
+...     data = f.asarray()
 (100, 100, 100)
 (1.0, 1.0, 1.0)
 
 Convert the PIC file to a compressed TIFF file:
 
->>> BioradPic('_biorad.pic').totiff('_biorad.tif', compress=6)
+>>> with BioradPic('_biorad.pic') as f:
+...     f.totiff('_biorad.tif', compression='zlib')
 
 
 References
@@ -204,7 +212,7 @@ The following software is referenced in this module:
 
 """
 
-__version__ = '2021.2.22'
+__version__ = '2021.6.6'
 
 __all__ = (
     'LfdFile',
@@ -367,9 +375,11 @@ class LfdFile(LfdFileBase):
 
     Examples
     --------
-    >>> with LfdFile('flimfast.flif') as f: type(f)
+    >>> with LfdFile('flimfast.flif') as f:
+    ...     type(f)
     <class '...FlimfastFlif'>
-    >>> with LfdFile('simfcs.ref', validate=False) as f: type(f)
+    >>> with LfdFile('simfcs.ref', validate=False) as f:
+    ...     type(f)
     <class '...SimfcsRef'>
     >>> with LfdFile('simfcs.bin', shape=(-1, 256, 256), dtype='u2') as f:
     ...     type(f)
@@ -406,11 +416,12 @@ class LfdFile(LfdFileBase):
             try:
                 with lfdfile(filename, *args, **kwargs):
                     pass
-                return super().__new__(lfdfile)
             except FileNotFoundError:
                 raise
             except Exception:
-                pass
+                continue
+            else:
+                return super().__new__(lfdfile)
         raise LfdFileError('failed to read file using any LfdFile class')
 
     def __init__(self, filename, *args, **kwargs):
@@ -432,6 +443,7 @@ class LfdFile(LfdFileBase):
         self.shape = None
         self.dtype = None
         self.axes = None
+        self._pos = None
 
         self._filepath, self._filename = os.path.split(os.fspath(filename))
         self.components = self._components() if components else []
@@ -465,10 +477,26 @@ class LfdFile(LfdFileBase):
                 self.axes = 'S' + components[0][1].axes
         else:
             self._fh = open(filename, self._filemode)
-            if self._filesizemin != len(self._fh.read(self._filesizemin)):
-                raise LfdFileError(self, 'file is too small')
+            try:
+                if self._filesizemin != len(self._fh.read(self._filesizemin)):
+                    raise LfdFileError(self, 'file is too small')
+            except LfdFileError:
+                self._fh.close()
+                self._fh = None
+                raise
+            except Exception:
+                self._fh.close()
+                self._fh = None
+                raise LfdFileError(self, 'not a text file')
+
             self._fh.seek(0)
-            self._init(*args, **kwargs)
+            try:
+                self._init(*args, **kwargs)
+            except Exception:
+                if self._fh:
+                    self._fh.close()
+                    self._fh = None
+                raise
             if self._fh:
                 self._pos = self._fh.tell()
 
@@ -508,6 +536,8 @@ class LfdFile(LfdFileBase):
         if self._fh:
             self._fh.close()
             self._fh = None
+        for _, component in self.components:
+            component.close()
 
     def asarray(self, *args, **kwargs):
         """Return data in file(s) as numpy array."""
@@ -523,7 +553,7 @@ class LfdFile(LfdFileBase):
         if filename is None:
             filename = os.path.join(self._filepath, self._filename) + '.tif'
         kwargs2 = parse_kwargs(
-            kwargs, imagej=False, bigtiff=False, byteorder='<'
+            kwargs, imagej=False, ome=None, bigtiff=False, byteorder='<'
         )
         update_kwargs(kwargs, photometric='minisblack', software='lfdfiles')
         with TiffWriter(filename, **kwargs2) as tif:
@@ -685,9 +715,10 @@ class LfdFileSequence(FileSequence):
     >>> ims = LfdFileSequence('gpint/v?001.int', imread=SimfcsInt)
     >>> ims.axes
     'I'
-    >>> ims = ims.asarray()
-    >>> ims.shape
+    >>> data = ims.asarray()
+    >>> data.shape
     (2, 256, 256)
+    >>> ims.close()
 
     """
 
@@ -735,7 +766,7 @@ class RawPal(LfdFile):
 
     """
 
-    _filepattern = r'.*\.(pal|raw|bin|lut)'
+    _filepattern = r'.*\.(pal|raw|bin|lut)$'
     _figureargs = {'figsize': (6, 1)}
 
     def _init(self):
@@ -808,18 +839,20 @@ class SimfcsVpl(LfdFile):
     ...     f.totiff('_simfcs.vpl.tif')
     ...     print(f.shape, data[100])
     (256, 3) [189 210 246]
-    >>> assert_array_equal(TiffFile('_simfcs.vpl.tif').asarray()[0], data)
+    >>> with TiffFile('_simfcs.vpl.tif') as f:
+    ...     assert_array_equal(f.asarray()[0], data)
 
     >>> with SimfcsVpl('imobj.vpl') as f:
     ...     data = f.asarray()
     ...     f.totiff('_imobj.vpl.tif')
     ...     print(f.shape, data[100])
     (256, 3) [  0 254  27]
-    >>> assert_array_equal(TiffFile('_imobj.vpl.tif').asarray()[0], data)
+    >>> with TiffFile('_imobj.vpl.tif') as f:
+    ...     assert_array_equal(f.asarray()[0], data)
 
     """
 
-    _filepattern = r'.*\.vpl'
+    _filepattern = r'.*\.vpl$'
     _figureargs = {'figsize': (6, 1)}
 
     def _init(self):
@@ -885,11 +918,12 @@ class SimfcsVpp(LfdFile):
     ...     f.totiff('_simfcs.vpp.tif')
     ...     print(f.shape, data[100])
     (256, 4) [ 16 255 239 255]
-    >>> assert_array_equal(TiffFile('_simfcs.vpp.tif').asarray()[35, 0], data)
+    >>> with TiffFile('_simfcs.vpp.tif') as f:
+    ...     assert_array_equal(f.asarray()[35, 0], data)
 
     """
 
-    _filepattern = r'.*\.vpp'
+    _filepattern = r'.*\.vpp$'
     _filesizemin = 24
 
     def _init(self):
@@ -998,7 +1032,7 @@ class SimfcsJrn(LfdFile):
     """
 
     _filemode = 'r'
-    _filepattern = r'.*\.jrn'
+    _filepattern = r'.*\.jrn$'
 
     # regular expressions of all keys found in journal files
     _keys = r"""
@@ -1174,14 +1208,15 @@ class SimfcsBin(LfdFile):
     --------
     >>> with SimfcsBin('simfcs.bin', (-1, 256, 256), 'uint16') as f:
     ...     data = f.asarray(memmap=True)
-    ...     f.totiff('_simfcs.bin.tif', compress=6)
+    ...     f.totiff('_simfcs.bin.tif', compression='zlib')
     ...     print(f.shape, data[751, 127, 127])
     (752, 256, 256) 1
-    >>> assert_array_equal(TiffFile('_simfcs.bin.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.bin.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(bin|raw)'
+    _filepattern = r'.*\.(bin|raw)$'
 
     def _init(self, shape, dtype, offset=0, validate_size=True):
         """Validate file size is a multiple of provided shape and type.
@@ -1248,7 +1283,7 @@ class SimfcsInt(LfdFile):
 
     """
 
-    _filepattern = r'.*\.(int|ac)'
+    _filepattern = r'.*\.(int|ac)$'
 
     def _init(self):
         """Validate file size is 256 KB."""
@@ -1288,7 +1323,7 @@ class SimfcsIntPhsMod(LfdFile):
 
     """
 
-    _filepattern = r'.*\.(int|phs|mod)'
+    _filepattern = r'.*\.(int|phs|mod)$'
     _figureargs = {'figsize': (6, 8)}
 
     def _init(self):
@@ -1367,11 +1402,12 @@ class SimfcsFit(LfdFile):
     ...     f.totiff('_simfcs.fit.tif')
     ...     print(f'{p_fit[6, 1, 1]:.3f} {dc_ref[128, 128]:.2f}')
     0.937 20.23
-    >>> assert_array_equal(TiffFile('_simfcs.fit.tif').asarray(), dc_ref)
+    >>> with TiffFile('_simfcs.fit.tif') as f:
+    ...     assert_array_equal(f.asarray(), dc_ref)
 
     """
 
-    _filepattern = r'.*\.fit'
+    _filepattern = r'.*\.fit$'
     # type of data in file
     _record_t = numpy.dtype(
         [
@@ -1403,7 +1439,7 @@ class SimfcsFit(LfdFile):
     def _init(self):
         """Validate file size is 384 KB."""
         if self._filesize != 393224:
-            raise LfdFileError(self, 'size mismatch')
+            raise LfdFileError(self, 'file size mismatch')
 
     def _asarray(self, size=32):
         """Return fit parameters and intensity image as numpy arrays.
@@ -1453,11 +1489,12 @@ class SimfcsCyl(LfdFile):
     ...     f.totiff('_simfcs.cyl.tif')
     ...     print(f.shape, data[0, -1, :4])
     (2, 3291, 256) [109 104 105 112]
-    >>> assert_array_equal(TiffFile('_simfcs.cyl.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.cyl.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.cyl'
+    _filepattern = r'.*\.cyl$'
     _figureargs = {'figsize': (6, 3)}
 
     def _init(self, shape=(2, -1, 256)):
@@ -1527,11 +1564,12 @@ class SimfcsRef(LfdFile):
     ...     f.totiff('_simfcs.ref.tif')
     ...     print(f.shape, data[:, 255, 255])
     (5, 256, 256) [301.33  44.71   0.62  68.13   0.32]
-    >>> assert_array_equal(TiffFile('_simfcs.ref.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.ref.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.ref'
+    _filepattern = r'.*\.ref$'
     _figureargs = {'figsize': (6, 11)}
 
     def _init(self):
@@ -1594,11 +1632,12 @@ class SimfcsBh(LfdFile):
     ...     f.totiff('_simfcs.b&h.tif')
     ...     print(f.shape, data[59, 1, 84])
     (256, 256, 256) 12.0
-    >>> assert_array_equal(TiffFile('_simfcs.b&h.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.b&h.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(b&h)'
+    _filepattern = r'.*\.(b&h)$'
 
     def _init(self):
         """Verify file size is multiple of 262144."""
@@ -1614,7 +1653,7 @@ class SimfcsBh(LfdFile):
 
     def _totiff(self, tif, **kwargs):
         """Write image data to TIFF file."""
-        update_kwargs(kwargs, compress=6, contiguous=False)
+        update_kwargs(kwargs, compression='zlib', contiguous=False)
         data = self.asarray()
         # reshape according to axes provided by user
         axes = parse_kwargs(kwargs, axes=None)['axes']
@@ -1642,11 +1681,12 @@ class SimfcsBhz(SimfcsBh):
     ...     f.totiff('_simfcs.bhz.tif')
     ...     print(f.shape, data[59, 1, 84])
     (256, 256, 256) 12.0
-    >>> assert_array_equal(TiffFile('_simfcs.bhz.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.bhz.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(bhz)'
+    _filepattern = r'.*\.(bhz)$'
 
     def _init(self):
         """Verify Zip file contains file with size multiple of 262144."""
@@ -1669,7 +1709,7 @@ class SimfcsBhz(SimfcsBh):
 
     def _totiff(self, tif, **kwargs):
         """Write image data to TIFF file."""
-        update_kwargs(kwargs, compress=6, contiguous=False)
+        update_kwargs(kwargs, compression='zlib', contiguous=False)
         tif.save(self.asarray(), **kwargs)
 
 
@@ -1687,14 +1727,15 @@ class SimfcsB64(LfdFile):
     --------
     >>> with SimfcsB64('simfcs.b64') as f:
     ...     data = f.asarray()
-    ...     f.totiff('_simfcs.b64.tif', compress=6)
+    ...     f.totiff('_simfcs.b64.tif', compression='zlib')
     ...     print(f.shape, data[101, 255, 255])
     (102, 256, 256) 0
-    >>> assert_array_equal(TiffFile('_simfcs.b64.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.b64.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.b64'
+    _filepattern = r'.*\.b64$'
 
     def _init(self, dtype='<i2', maxsize=4096):
         """Read file header."""
@@ -1752,7 +1793,8 @@ def simfcsb64_write(filename, data):
     --------
     >>> data = numpy.arange(5*256*256).reshape(5, 256, 256).astype('int16')
     >>> simfcsb64_write('_test.b64', data)
-    >>> assert_array_equal(SimfcsB64('_test.b64').asarray(), data)
+    >>> with SimfcsB64('_test.b64') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     if data.dtype != 'int16':
@@ -1781,11 +1823,12 @@ class SimfcsI64(LfdFile):
     ...     f.totiff('_simfcs1000.i64.tif')
     ...     print(f.shape, data[128, 128])
     (256, 256) 12.3125
-    >>> assert_array_equal(TiffFile('_simfcs1000.i64.tif').asarray(), data)
+    >>> with TiffFile('_simfcs1000.i64.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.i64'
+    _filepattern = r'.*\.i64$'
 
     def _init(self, dtype='<f4', maxsize=1024):
         """Read file header."""
@@ -1832,7 +1875,8 @@ def simfcsi64_write(filename, data):
     --------
     >>> data = numpy.arange(256*256).reshape(256, 256).astype('float32')
     >>> simfcsi64_write('_test.i64', data)
-    >>> assert_array_equal(SimfcsI64('_test.i64').asarray(), data)
+    >>> with SimfcsI64('_test.i64') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     if data.dtype.char != 'f':
@@ -1864,18 +1908,20 @@ class SimfcsZ64(LfdFile):
     ...     f.totiff('_simfcs.z64.tif')
     ...     print(f.shape, data[142, 128, 128])
     (256, 256, 256) 2.0
-    >>> assert_array_equal(TiffFile('_simfcs.z64.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.z64.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     >>> with SimfcsZ64('simfcs_allDC.z64', doubleheader=True) as f:
     ...     data = f.asarray()
     ...     f.totiff('_simfcs_allDC.z64.tif')
     ...     print(f.shape, data[128, 128])
     (256, 256) 172.0
-    >>> assert_array_equal(TiffFile('_simfcs_allDC.z64.tif').asarray(), data)
+    >>> with TiffFile('_simfcs_allDC.z64.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(z64|i64)'
+    _filepattern = r'.*\.(z64|i64)$'
     _filesizemin = 32
 
     def _init(self, dtype='<f4', maxsize=(256, 1024), doubleheader=False):
@@ -1909,7 +1955,7 @@ class SimfcsZ64(LfdFile):
 
     def _totiff(self, tif, **kwargs):
         """Write image data to TIFF file."""
-        update_kwargs(kwargs, compress=6, contiguous=False)
+        update_kwargs(kwargs, compression='zlib', contiguous=False)
         data = self.asarray()
         # reshape according to axes provided by user
         axes = parse_kwargs(kwargs, axes=None)['axes']
@@ -1937,7 +1983,8 @@ def simfcsz64_write(filename, data):
     --------
     >>> data = numpy.arange(5*256*256).reshape(5, 256, 256).astype('float32')
     >>> simfcsz64_write('_test.z64', data)
-    >>> assert_array_equal(SimfcsZ64('_test.z64').asarray(), data)
+    >>> with SimfcsZ64('_test.z64') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     if data.dtype.char != 'f':
@@ -1972,11 +2019,12 @@ class SimfcsR64(SimfcsRef):
     ...     f.totiff('_simfcs.r64.tif')
     ...     print(f.shape, data[:, 100, 200])
     (5, 256, 256) [  0.25  23.22   0.64 104.33   2.12]
-    >>> assert_array_equal(TiffFile('_simfcs.r64.tif').asarray(), data)
+    >>> with TiffFile('_simfcs.r64.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.r64'
+    _filepattern = r'.*\.r64$'
 
     def _init(self, dtype='<f4', maxsize=1024):
         """Read file header."""
@@ -2000,7 +2048,9 @@ class SimfcsR64(SimfcsRef):
 
     def _totiff(self, tif, **kwargs):
         """Write image data to TIFF file."""
-        update_kwargs(kwargs, compress=6, contiguous=False, metadata=False)
+        update_kwargs(
+            kwargs, compression='zlib', contiguous=False, metadata=False
+        )
         label = 'dc'
         for i, image in enumerate(self.asarray()):
             if i > 0:
@@ -2026,7 +2076,8 @@ def simfcsr64_write(filename, data):
     --------
     >>> data = numpy.arange(5*256*256).reshape(5, 256, 256).astype('float32')
     >>> simfcsr64_write('_test.r64', data)
-    >>> assert_array_equal(SimfcsR64('_test.r64').asarray(), data)
+    >>> with SimfcsR64('_test.r64') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     if data.dtype.char != 'f':
@@ -2062,7 +2113,7 @@ class SimfcsFbf(LfdFile):
 
     """
 
-    _filepattern = r'.*\.(fbf)'
+    _filepattern = r'.*\.(fbf)$'
     _plot = None
 
     def _init(self, maxheaderlength=1024):
@@ -2217,7 +2268,7 @@ class SimfcsFbd(LfdFile):
 
     """
 
-    _filepattern = r'.*\.fbd'
+    _filepattern = r'.*\.fbd$'
     _figureargs = {'figsize': (6, 5)}
 
     _attributes = (
@@ -3127,13 +3178,13 @@ class GlobalsLif(LfdFile):
 
     Examples
     --------
-    >>> with GlobalsLif('globals.lif') as lif:
-    ...     print(len(lif), lif[42]['date'], lif[42].asarray().shape)
+    >>> with GlobalsLif('globals.lif') as f:
+    ...     print(len(f), f[42]['date'], f[42].asarray().shape)
     43 1987.8.8 (5, 11)
 
     """
 
-    _filepattern = r'.*\.lif'
+    _filepattern = r'.*\.lif$'
 
     _record_t = numpy.dtype(
         [
@@ -3152,6 +3203,8 @@ class GlobalsLif(LfdFile):
     )
 
     class Record(dict):
+        """Record in GlobalsLif files."""
+
         def asarray(self):
             return numpy.array(
                 (
@@ -3275,7 +3328,7 @@ class GlobalsAscii(LfdFile):
     """
 
     _filemode = 'r'
-    _filepattern = r'.*\.(\d){3}'
+    _filepattern = r'.*\.(\d){3}$'
     _figureargs = {'figsize': (6, 5)}
 
     def _init(self):
@@ -3396,13 +3449,12 @@ class VistaIfli(LfdFile):
     (1, 2, 1, 128, 128, 2, 3)
     >>> f.totiff('_vista.ifli.tif')
     >>> f.close()
-    >>> assert_array_equal(
-    ...    TiffFile('_vista.ifli.tif').asarray()[0, 0], data[..., 0, 0]
-    ... )
+    >>> with TiffFile('_vista.ifli.tif') as f:
+    ...     assert_array_equal(f.asarray()[0, 0], data[..., 0, 0])
 
     """
 
-    _filepattern = r'.*\.ifli'
+    _filepattern = r'.*\.ifli$'
     _figureargs = {'figsize': (8, 7.5)}
 
     def _header_t(self, number_frequencies):
@@ -3543,11 +3595,12 @@ class FlimfastFlif(LfdFile):
     366
     >>> f.totiff('_flimfast.flif.tif')
     >>> f.close()
-    >>> assert_array_equal(TiffFile('_flimfast.flif.tif').asarray(), data)
+    >>> with TiffFile('_flimfast.flif.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.flif'
+    _filepattern = r'.*\.flif$'
     _figureargs = {'figsize': (6, 7)}
 
     _header_t = numpy.dtype(
@@ -3678,11 +3731,12 @@ class FlimageBin(LfdFile):
     ...     f.totiff('_flimage.int.bin.tif')
     ...     print(f.shape, data[:, 219, 299])
     (3, 220, 300) [  1.23 111.8   36.93]
-    >>> assert_array_equal(TiffFile('_flimage.int.bin.tif').asarray(), data)
+    >>> with TiffFile('_flimage.int.bin.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(int|mod|phi|tmd|tph)\.bin'
+    _filepattern = r'.*\.(int|mod|phi|tmd|tph)\.bin$'
     _figureargs = {'figsize': (6, 7)}
 
     def _init(self):
@@ -3750,11 +3804,12 @@ class FlieOut(LfdFile):
     ...     f.totiff('_off_flie.out.tif')
     ...     print(f.shape, data[:, 219, 299])
     (3, 220, 300) [91.85 28.24 69.03]
-    >>> assert_array_equal(TiffFile('_off_flie.out.tif').asarray(), data)
+    >>> with TiffFile('_off_flie.out.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'(off|phi|mod)_.*\.out'
+    _filepattern = r'(off|phi|mod)_.*\.out$'
     _figureargs = {'figsize': (6, 7)}
 
     def _init(self):
@@ -3812,11 +3867,12 @@ class FliezI16(LfdFile):
     ...     f.totiff('_fliez.i16.tif')
     ...     print(f.shape, data[::8, 108, 104])
     (32, 256, 256) [401 538 220 297]
-    >>> assert_array_equal(TiffFile('_fliez.i16.tif').asarray(), data)
+    >>> with TiffFile('_fliez.i16.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.i16'
+    _filepattern = r'.*\.i16$'
 
     def _init(self):
         """Verify file size is 128 KB."""
@@ -3851,11 +3907,12 @@ class FliezDb2(LfdFile):
     ...     f.totiff('_fliez.db2.tif')
     ...     print(f.shape, data[8, 108, 104])
     (32, 256, 256) 234.0
-    >>> assert_array_equal(TiffFile('_fliez.db2.tif').asarray(), data)
+    >>> with TiffFile('_fliez.db2.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.db2'
+    _filepattern = r'.*\.db2$'
 
     def _init(self):
         """Read data shape and verify file size."""
@@ -3897,11 +3954,12 @@ class BioradPic(LfdFile):
     ...     f.totiff('_biorad.pic.tif')
     ...     print(f.shape, data[78, 255, 255])
     (79, 256, 256) 8
-    >>> assert_array_equal(TiffFile('_biorad.pic.tif').asarray(), data)
+    >>> with TiffFile('_biorad.pic.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.pic'
+    _filepattern = r'.*\.pic$'
     _filesizemin = 76
     _figureargs = {'figsize': (8, 6)}
 
@@ -4063,7 +4121,8 @@ def bioradpic_write(
     --------
     >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
     >>> bioradpic_write('_test.pic', data)
-    >>> assert_array_equal(BioradPic('_test.pic').asarray(), data)
+    >>> with BioradPic('_test.pic') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     data = numpy.asarray(data)
@@ -4184,14 +4243,15 @@ class Ccp4Map(LfdFile):
     --------
     >>> with Ccp4Map('ccp4.map') as f:
     ...     data = f.asarray()
-    ...     f.totiff('_ccp4.map.tif', compress=6)
+    ...     f.totiff('_ccp4.map.tif', compression='zlib')
     ...     print(f.shape, data[100, 100, 100])
     (256, 256, 256) 1.0
-    >>> assert_array_equal(TiffFile('_ccp4.map.tif').asarray(), data)
+    >>> with TiffFile('_ccp4.map.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(map|ccp4)'
+    _filepattern = r'.*\.(map|ccp4)$'
     _filesizemin = 1024 + 80
     _dtypes = {0: 'i1', 1: 'i2', 2: 'f4', 4: 'q8', 5: 'i1'}
 
@@ -4359,7 +4419,8 @@ def ccp4map_write(
     --------
     >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('f4')
     >>> ccp4map_write('_test.ccp4', data)
-    >>> assert_array_equal(Ccp4Map('_test.ccp4').asarray(), data)
+    >>> with Ccp4Map('_test.ccp4') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     data = numpy.asarray(data)
@@ -4467,11 +4528,12 @@ class Vaa3dRaw(LfdFile):
     ...     f.totiff('_vaa3d.v3draw.tif')
     ...     print(f.shape, data[2, 100, 100, 100])
     (3, 181, 217, 181) 138
-    >>> assert_array_equal(TiffFile('_vaa3d.v3draw.tif').asarray(), data)
+    >>> with TiffFile('_vaa3d.v3draw.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(v3draw|raw)'
+    _filepattern = r'.*\.(v3draw|raw)$'
     _filesizemin = 24 + 1 + 2 + 4 * 2  # 2 byte format
     _figureargs = {'figsize': (8, 8)}
 
@@ -4536,7 +4598,8 @@ def vaa3draw_write(filename, data, byteorder=None, twobytes=False):
     --------
     >>> data = numpy.arange(1000000).reshape(10, 10, 100, 100).astype('uint16')
     >>> vaa3draw_write('_test.v3draw', data, byteorder='<')
-    >>> assert_array_equal(Vaa3dRaw('_test.v3draw').asarray(), data)
+    >>> with Vaa3dRaw('_test.v3draw') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     data = numpy.array(data, order='C', ndmin=5, copy=False)
@@ -4579,12 +4642,13 @@ class VoxxMap(LfdFile):
     ...     f.totiff('_voxx.map.tif')
     ...     print(f.shape, data[100])
     (256, 3) [255 227 155 237]
-    >>> assert_array_equal(TiffFile('_voxx.map.tif').asarray()[0], data)
+    >>> with TiffFile('_voxx.map.tif') as f:
+    ...     assert_array_equal(f.asarray()[0], data)
 
     """
 
     _filemode = 'r'
-    _filepattern = r'.*\.map'
+    _filepattern = r'.*\.map$'
     _figureargs = {'figsize': (6, 1)}
 
     def _init(self):
@@ -4637,7 +4701,8 @@ def voxxmap_write(filename, data):
     --------
     >>> data = numpy.repeat(numpy.arange(256, dtype='uint8'), 4).reshape(-1, 4)
     >>> voxxmap_write('_test_vox.map', data)
-    >>> assert_array_equal(VoxxMap('_test_vox.map').asarray(), data)
+    >>> with VoxxMap('_test_vox.map') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
     data = numpy.array(data, copy=False)
@@ -4663,11 +4728,12 @@ class NetpbmFile(LfdFile):
     ...     f.totiff('_netpbm.pam.tif')
     ...     print(f.shape, data[75, 75, 1])
     (150, 150, 4) 255
-    >>> assert_array_equal(TiffFile('_netpbm.pam.tif').asarray(), data)
+    >>> with TiffFile('_netpbm.pam.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(pnm|pbm|pgm|ppm|pam|pfm|xv)'
+    _filepattern = r'.*\.(pnm|pbm|pgm|ppm|pam|pfm|xv)$'
     _figureargs = {'figsize': (8, 6)}
 
     def _init(self, **kwargs):
@@ -4740,7 +4806,7 @@ class OifFile(LfdFile):
 
     """
 
-    _filepattern = r'.*\.(oib|oif)'
+    _filepattern = r'.*\.(oib|oif)$'
     _figureargs = {'figsize': (8, 7)}
 
     def _init(self, **kwargs):
@@ -4810,11 +4876,12 @@ class CziFile(LfdFile):
     ...     f.totiff('_czifile.czi.tif')
     ...     print(f.shape, data[2, 2, 2, 80, 32, 2])
     (3, 3, 3, 250, 200, 3) 255
-    >>> assert_array_equal(TiffFile('_czifile.czi.tif').asarray(), data)
+    >>> with TiffFile('_czifile.czi.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(czi)'
+    _filepattern = r'.*\.(czi)$'
     _figureargs = {'figsize': (8, 6)}
 
     def _init(self, **kwargs):
@@ -4882,11 +4949,12 @@ class TiffFile(LfdFile):
     ...     f.totiff('_tifffile.tif.tif')
     ...     print(f.shape, data[31, 30, 2])
     (32, 31, 3) 80
-    >>> assert_array_equal(TiffFile('_tifffile.tif.tif').asarray(), data)
+    >>> with TiffFile('_tifffile.tif.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
 
     """
 
-    _filepattern = r'.*\.(tif|tiff|stk|lsm|tf8)'
+    _filepattern = r'.*\.(tif|tiff|stk|lsm|tf8)$'
     _figureargs = {'figsize': (8, 6)}
 
     def _init(self, **kwargs):
@@ -4948,7 +5016,7 @@ class TiffFile(LfdFile):
         return getattr(self._tif, name)
 
 
-def convert2tiff(files, compress=0, verbose=True, skip=None):
+def convert2tiff(files, verbose=True, skip=None, **kwargs):
     """Convert image data from LfdFile(s) to TIFF files.
 
     Examples
@@ -4973,7 +5041,7 @@ def convert2tiff(files, compress=0, verbose=True, skip=None):
         for cls in registry:
             try:
                 with cls(file, validate=True) as fh:
-                    fh.totiff(compress=compress)
+                    fh.totiff(**kwargs)
                 if verbose:
                     print(cls.__name__)
                 break
