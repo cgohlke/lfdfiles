@@ -24,23 +24,31 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.2.22
+:Version: 2021.6.6
 
 Requirements
 ------------
-* `CPython >= 3.7 <https://www.python.org>`_
-* `Numpy 1.15 <https://www.numpy.org>`_
-* `Tifffile 2020.9.3 <https://pypi.org/project/tifffile/>`_
+This release has been tested with the following requirements and dependencies
+(other versions may work):
+
+* `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
+* `Cython 0.29.23 <https://cython.org>`_ (build)
+* `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
+* `Tifffile 2021.4.8 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-* `Oiffile 2020.9.18 <https://pypi.org/project/oiffile />`_ (optional)
-* `Netpbmfile 2020.9.18 <https://pypi.org/project/netpbmfile />`_ (optional)
-* `Matplotlib 3.2 <https://pypi.org/project/matplotlib/>`_
+* `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
+* `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
+* `Matplotlib 3.4.2 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
-* `Click 7.0 <https://pypi.python.org/pypi/click>`_
+* `Click 8.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2021.6.6
+    Fix unclosed file warnings.
+    Replace TIFF compress with compression parameter (breaking).
+    Remove compress option from command line interface (breaking).
 2021.2.22
     Add function to decode Spectral FLIM data from Kintex FLIMbox.
     Relax VistaIfli file version check.
@@ -114,7 +122,6 @@ order.
 
 Examples
 --------
-
 Create a Bio-Rad PIC file from a numpy array:
 
 >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
@@ -122,16 +129,17 @@ Create a Bio-Rad PIC file from a numpy array:
 
 Read the volume data from the PIC file as numpy array, and access metadata:
 
->>> with BioradPic('_biorad.pic') as pic:
-...     data = pic.asarray()
-...     pic.shape
-...     pic.spacing
+>>> with BioradPic('_biorad.pic') as f:
+...     f.shape
+...     f.spacing
+...     data = f.asarray()
 (100, 100, 100)
 (1.0, 1.0, 1.0)
 
 Convert the PIC file to a compressed TIFF file:
 
->>> BioradPic('_biorad.pic').totiff('_biorad.tif', compress=6)
+>>> with BioradPic('_biorad.pic') as f:
+...     f.totiff('_biorad.tif', compression='zlib')
 
 
 References
