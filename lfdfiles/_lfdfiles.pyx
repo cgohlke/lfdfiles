@@ -78,7 +78,7 @@ def simfcsfbd_decode(
     uint16_t win_mask,
     uint32_t win_shr
     ):
-    """Decode FlimBox data stream.
+    """Decode FLIMbox data stream.
 
     See the lfdfiles.SimfcsFbd documentation for parameter descriptions.
 
@@ -150,7 +150,7 @@ def simfcsfbd_histogram(
     double scanner_frame_start,
     uint16_t[:, :, :, ::1] hist_out
     ):
-    """Calculate histograms from decoded FlimBox data and frame markers.
+    """Calculate histograms from decoded FLIMbox data and frame markers.
 
     See the lfdfiles.SimfcsFbd documentation for parameter descriptions.
 
