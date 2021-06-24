@@ -193,12 +193,12 @@ def sflim_decode(
     const ssize_t maxframes=-1,
     const int numthreads=1
 ):
-    """Decode Kintex FLIMBox data to SLIM image array.
+    """Decode Kintex FLIMbox data to SLIM image array.
 
     Parameters
     ----------
     data : 1D array of uint32
-        Data stream from a Kintex FLIMBox.
+        Data stream from a Kintex FLIMbox.
     sflim: 4D array of uint8 or uint16
         Initialized array of shape (channels=32, phasebins=256, height, width)
         to which photon counts are added.
