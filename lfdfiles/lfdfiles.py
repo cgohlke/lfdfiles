@@ -41,7 +41,7 @@ experimental data and metadata at the `Laboratory for Fluorescence Dynamics
 * CCP4 MAP
 * Vaa3D RAW
 * Bio-Rad(r) PIC
-* Vista IFLI
+* Vista IFLI, IFI
 * FlimFast FLIF
 
 For command line usage run ``python -m lfdfiles --help``
@@ -54,7 +54,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.6.6
+:Version: 2021.6.25
 
 Requirements
 ------------
@@ -64,7 +64,7 @@ This release has been tested with the following requirements and dependencies
 * `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
 * `Cython 0.29.23 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2021.4.8 <https://pypi.org/project/tifffile/>`_  (optional)
+* `Tifffile 2021.6.14 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
 * `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
 * `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
@@ -75,6 +75,12 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.6.25
+    Read ISS Vista IFI files.
+    Fix reading FBD files with FBF header.
+    Fix reading R64 files with excess bytes.
+    Fix reading VPL files used by ISS Vista.
+    Remove lazyattr.
 2021.6.6
     Fix unclosed file warnings.
     Replace TIFF compress with compression parameter (breaking).
@@ -92,14 +98,13 @@ Revisions
     Read Netpbm formats via netpbmfile module.
     Add B64, Z64, and I64 write functions.
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2019.7.2
    Require tifffile 2019.7.2.
    Remove some utility functions.
 2019.5.22
     Read and write Bio-Rad(tm) PIC files.
     Read and write Voxx MAP palette files.
-    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw.
+    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw (breaking).
     Rename save functions.
 2019.4.22
     Fix setup requirements.
@@ -128,7 +133,7 @@ Revisions
 2014.4.8
     Read and write CCP4 MAP volume files.
 2013.8.10
-    Read second harmonics FlimBox data.
+    Read second harmonics FLIMbox data.
 
 Notes
 -----
@@ -204,7 +209,7 @@ The following software is referenced in this module:
 10. `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
     data visualization and analysis, developed by the Hanchuan Peng group at
     the Allen Institute.
-11. `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
+11. `Voxx <https://voxx.sitehost.iu.edu/>`_ is a volume rendering program
     for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
     University.
 12. `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
@@ -212,7 +217,7 @@ The following software is referenced in this module:
 
 """
 
-__version__ = '2021.6.6'
+__version__ = '2021.6.25'
 
 __all__ = (
     'LfdFile',
@@ -241,6 +246,7 @@ __all__ = (
     'GlobalsLif',
     'GlobalsAscii',
     'VistaIfli',
+    'VistaIfi',
     'Ccp4Map',
     'Vaa3dRaw',
     'VoxxMap',
@@ -315,24 +321,6 @@ def import_pyplot(fail=True):
             raise
         return False
     return True
-
-
-class lazyattr:
-    """Lazy object attribute whose value is computed on first access."""
-
-    __slots__ = ('func',)
-
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        result = self.func(instance)
-        if result is NotImplemented:
-            return getattr(super(owner, instance), self.func.__name__)
-        setattr(instance, self.func.__name__, result)
-        return result
 
 
 class LfdFileError(Exception):
@@ -444,6 +432,7 @@ class LfdFile(LfdFileBase):
         self.dtype = None
         self.axes = None
         self._pos = None
+        self._fsize = None
 
         self._filepath, self._filename = os.path.split(os.fspath(filename))
         self.components = self._components() if components else []
@@ -622,8 +611,10 @@ class LfdFile(LfdFileBase):
             ax.imshow(data, **kwargs)
             ax = pyplot.subplot2grid((3, 1), (2, 0))
             ax.set_title('Histogram')
-            bins = data.max() - data.min() if data.dtype.kind in 'iu' else 64
-            bins = bins if bins else 64
+            if data.dtype.kind in 'iu':
+                bins = max(4, data.max() - data.min())
+            else:
+                bins = 64
             hist, bins = numpy.histogram(data, bins=bins)
             width = 0.7 * (bins[1] - bins[0])
             center = (bins[:-1] + bins[1:]) / 2
@@ -666,19 +657,19 @@ class LfdFile(LfdFileBase):
         decompressor = zlib.decompressobj()
         return decompressor.decompress(data, max_length)
 
-    @lazyattr
     def _fstat(self):
         """Return status of open file."""
         return os.fstat(self._fh.fileno())
 
-    @lazyattr
+    @property
     def _filesize(self):
         """Return file size in bytes."""
-        pos = self._fh.tell()
-        self._fh.seek(0, 2)
-        size = self._fh.tell()
-        self._fh.seek(pos)
-        return size
+        if self._fsize is None:
+            pos = self._fh.tell()
+            self._fh.seek(0, 2)
+            self._fsize = self._fh.tell()
+            self._fh.seek(pos)
+        return self._fsize
 
     @property
     def filename(self):
@@ -861,7 +852,7 @@ class SimfcsVpl(LfdFile):
             self._fh.seek(24)
             self.name = None
         elif self._filesize >= 790:
-            if self._fh.read(7) != b'vimage:':
+            if self._fh.read(7)[:6] != b'vimage':
                 raise LfdFileError(self)
             self.name = bytes2str(stripnull(self._fh.read(15)))
         else:
@@ -1121,7 +1112,7 @@ class SimfcsJrn(LfdFile):
         if not firstline.startswith('*' * 80) or firstline.startswith('roi'):
             raise LfdFileError(self)
         content = self._fh.read()
-        self._filesize = len(firstline) + len(content)
+        self._fsize = len(firstline) + len(content)
         if not firstline.startswith('***'):
             content = firstline + '\n' + content
         self._lower = lower = (lambda x: x.lower()) if lower else (lambda x: x)
@@ -2041,9 +2032,9 @@ class SimfcsR64(SimfcsRef):
     def _asarray(self):
         """Return data as 3D array of float32."""
         bufsize = product(self.shape) * self.dtype.itemsize + 4
-        data = zlib.decompress(self._fh.read(), 15, bufsize)
+        data = zlib.decompress(self._fh.read(), bufsize=bufsize)
         data = numpy.frombuffer(data, '<' + self.dtype.char, offset=4)
-        data = data.copy()  # make writable
+        data = data[: product(self.shape)].copy()  # make writable
         return data.reshape((-1, self.shape[1], self.shape[2]))
 
     def _totiff(self, tif, **kwargs):
@@ -2091,9 +2082,9 @@ def simfcsr64_write(filename, data):
 
 
 class SimfcsFbf(LfdFile):
-    """FlimBox firmware.
+    """FLIMbox firmware.
 
-    SimFCS FBF files contain FlimBox device firmwares, stored in binary form
+    SimFCS FBF files contain FLIMbox device firmwares, stored in binary form
     following a NULL terminated ASCII string containing properties and
     description.
 
@@ -2177,13 +2168,13 @@ class SimfcsFbf(LfdFile):
 
 
 class SimfcsFbd(LfdFile):
-    """FlimBox data.
+    """FLIMbox data.
 
-    SimFCS FDB files contain raw data from the FlimBox device, storing a
+    SimFCS FDB files contain raw data from the FLIMbox device, storing a
     stream of 16 bit integers (data words) that can be decoded to photon
     arrival windows, channels, and times.
 
-    This implementation only handles files produced by the first FlimBox
+    This implementation only handles files produced by the first FLIMbox
     generation.
 
     The measurement's frame size, pixel dwell time, number of sampling
@@ -2231,9 +2222,9 @@ class SimfcsFbd(LfdFile):
     pixel_dwell_time : float
         Number of microseconds the scanner remains at each pixel/sample.
     windows : int
-        Number of sampling windows used by FlimBox.
+        Number of sampling windows used by FLIMbox.
     channels : int
-        Number of channels used by FlimBox.
+        Number of channels used by FLIMbox.
     harmonics : int
         First or second harmonics.
     pmax : int
@@ -2242,7 +2233,7 @@ class SimfcsFbd(LfdFile):
         Divisor to reduce number of entries in phase histogram.
     laser_frequency : float
         Laser frequency in Hz. Default is 20000000 Hz, the internal
-        FlimBox frequency.
+        FLIMbox frequency.
     correction_factor : float
         Factor to correct dwell_time/laser_frequency when the scanner
         clock is not known exactly. Default is 1.0.
@@ -2438,16 +2429,16 @@ class SimfcsFbd(LfdFile):
         # Binary header starting at offset 1024 in files with $xx0x names.
         # This is written as a memory dump of a Delphi record, hence the pads
         ('owner', '<i4'),  # must be 0
-        ('pixel_dwell_time_index', '<i4'),
-        ('frame_size_index', '<i4'),
+        ('pixel_dwell_time_index', '<i4'),  # index into SimFCS dropdown ctrl
+        ('frame_size_index', '<i4'),  # index into SimFCS dropdown ctrl
         ('line_length', '<i4'),
         ('points_end_of_frame', '<i4'),
         ('x_starting_pixel', '<i4'),
         ('line_integrate', '<i4'),
-        ('scanner_index', '<i4'),
-        ('synthesizer_index', '<i4'),
-        ('windows_index', '<i4'),
-        ('channels_index', '<i4'),
+        ('scanner_index', '<i4'),  # index into SimFCS dropdown ctrl
+        ('synthesizer_index', '<i4'),  # index into SimFCS dropdown ctrl
+        ('windows_index', '<i4'),  # index into SimFCS dropdown ctrl
+        ('channels_index', '<i4'),  # index into SimFCS dropdown ctrl
         ('_pad1', '<i4'),
         ('line_time', '<f8'),
         ('frame_time', '<f8'),
@@ -2491,6 +2482,8 @@ class SimfcsFbd(LfdFile):
     ]
 
     _header_pixel_dwell_time = (
+        1,
+        2,
         4,
         5,
         8,
@@ -2507,15 +2500,22 @@ class SimfcsFbd(LfdFile):
         500,
         512,
         1000,
-        1,
-        2,
+        2000,
     )
     _header_frame_size = (64, 128, 256, 320, 512, 640, 800, 1024)
     _header_bin_pixel_by = (1, 2, 4, 8)
     _header_windows = (4, 8, 16, 32, 64)
-    _header_channels = (1, 2, 4)  # '2 to 4 ch', '2 ch 8w Spartan6'
+    _header_channels = (
+        1,
+        2,
+        4,
+        # the following are not supported
+        4,  # 2 to 4 ch
+        2,  # 2 ch 8w Spartan6
+        4,  # 4 ch 16w frame
+    )
     _header_scanner_types = (
-        'None',
+        'None',  # IOTech scanner card
         'Native SimFCS, 3-axis card',
         'Olympus FV 1000, NI USB',
         'Zeiss LSM510',
@@ -2524,6 +2524,10 @@ class SimfcsFbd(LfdFile):
         'ISS Vista fast scanner',
         'M2 laptop only',
         'IOTech scanner card',
+        'Leica SP8',
+        'Zeiss LSM880',
+        'Olympus FV3000',
+        'Olympus 2P',
     )
     _header_synthesizer_names = (
         'Internal FLIMbox frequency',
@@ -2533,9 +2537,8 @@ class SimfcsFbd(LfdFile):
         'Coherent Chameleon',
     )
 
-    @lazyattr
     def decoder_settings(self):
-        """Return dictionary of parameters to decode FlimBox data stream.
+        """Return dictionary of parameters to decode FLIMbox data stream.
 
         Returns
         -------
@@ -2575,7 +2578,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w4c2():
-        # Return parameters to decode 4 windows, 2 channels FlimBox data.
+        # Return parameters to decode 4 windows, 2 channels FLIMbox data.
         # fmt: off
         a = [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
               1, 0, 3, 2, 1, 0, 3, 2, 1, -1, 3, 2, -1, -1, 3, -1],
@@ -2599,7 +2602,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w8c2():
-        # Return parameters to decode 8 windows, 2 channels FlimBox data.
+        # Return parameters to decode 8 windows, 2 channels FLIMbox data.
         a = numpy.zeros((2, 81), 'int16') - 1
         a[0, 1:9] = range(8)
         a[1, 9:17] = range(8)
@@ -2608,7 +2611,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w8c4():
-        # Return parameters to decode 8 windows, 4 channels FlimBox data.
+        # Return parameters to decode 8 windows, 4 channels FLIMbox data.
         # Not tested.
         a = numpy.zeros((4, 128), 'int16') - 1
         for i in range(128):
@@ -2631,7 +2634,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w16c1():
-        # Return parameters to decode 16 windows, 1 channel FlimBox data.
+        # Return parameters to decode 16 windows, 1 channel FLIMbox data.
         # Not tested.
         a = numpy.zeros((1, 32), 'int16') - 1
         for i in range(32):
@@ -2643,7 +2646,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w16c2():
-        # Return parameters to decode 16 windows, 2 channels FlimBox data.
+        # Return parameters to decode 16 windows, 2 channels FLIMbox data.
         # Not tested.
         a = numpy.zeros((2, 64), 'int16') - 1
         for i in range(64):
@@ -2660,13 +2663,13 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _w32c2():
-        # Return parameters to decode 32 windows, 2 channels FlimBox data.
+        # Return parameters to decode 32 windows, 2 channels FLIMbox data.
         # TODO
         raise NotImplementedError()
 
     @staticmethod
     def _w64c1():
-        # Return parameters to decode 64 windows, 1 channel FlimBox data.
+        # Return parameters to decode 64 windows, 1 channel FLIMbox data.
         # TODO
         raise NotImplementedError()
 
@@ -2692,7 +2695,7 @@ class SimfcsFbd(LfdFile):
             except AttributeError:
                 pass
         if not code:
-            code = 'CFCS'  # old FlimBox file ?
+            code = 'CFCS'  # old FLIMbox file ?
             warnings.warn(
                 f"failed to detect settings from file name;"
                 f"assuming a '{code}' file"
@@ -2700,8 +2703,8 @@ class SimfcsFbd(LfdFile):
 
         if code[2] == '0':
             # New FBD file format with header
-            # the first 1024 bytes contain the start of a FlimBox firmware file
-            with SimfcsFbf(self._fh.name) as fbf:
+            # the first 1024 bytes contain the start of a FLIMbox firmware file
+            with SimfcsFbf(self._fh.name, validate=False) as fbf:
                 self._fbf = fbf._settings
             # the next 31kB contain the binary file header
             self._fh.seek(1024, 0)
@@ -2719,15 +2722,15 @@ class SimfcsFbd(LfdFile):
             self.scanner_frame_start = 0
             self.windows = self._header_windows[hdr['windows_index']]
             self.channels = self._header_channels[hdr['channels_index']]
-            self.harmonics = (1, 2)[hdr['second_harmonic']]
+            self.harmonics = (1, 2)[self._fbf['secondharmonic']]
             self.laser_frequency = float(hdr['laser_frequency'])
             self.correction_factor = float(hdr['laser_factor'])
             assert self.windows == self._fbf['windows']
             assert self.channels == self._fbf['channels']
-            assert hdr['second_harmonic'] == self._fbf['secondharmonic']
-            # encoded data start at offset 32768
-            self._data_offset = 32768
+            self._data_offset = 32768  # start of encoded data
         else:
+            self._fbf = None
+            self._header = None
             self.frame_size = self._frame_size[code[0]]
             self.scanner = self._scanner_settings[code[3]]['name']
             (
@@ -2763,7 +2766,7 @@ class SimfcsFbd(LfdFile):
         self.laser_frequency *= self.harmonics
 
     def units_per_sample(self):
-        """Return number of FlimBox units per scanner sample."""
+        """Return number of FLIMbox units per scanner sample."""
         return (self.pixel_dwell_time / 1000000) * (
             self.pmax
             / (self.pmax - 1)
@@ -2779,7 +2782,7 @@ class SimfcsFbd(LfdFile):
         max_markers=65536,
         **kwargs,
     ):
-        """Read FlimBox data stream from file and return decoded data.
+        """Return decoded FLIMbox data stream.
 
         Parameters
         ----------
@@ -2798,7 +2801,7 @@ class SimfcsFbd(LfdFile):
             The cross correlation phase index for all channels and data points.
             A value of -1 means no photon was counted.
         times : ndarray of uint64 or uint32
-            The times in FlimBox counter units at each data point.
+            The times in FLIMbox counter units at each data point.
             A potentially huge array.
         markers : ndarray of ssize_t
             The indices of up markers in the data stream, usually indicating
@@ -2827,7 +2830,7 @@ class SimfcsFbd(LfdFile):
             self.pmax,
             self.pdiv,
             self.harmonics,
-            **self.decoder_settings,
+            **self.decoder_settings(),
         )
 
         markers_out = markers_out[markers_out > 0]
@@ -2955,7 +2958,7 @@ class SimfcsFbd(LfdFile):
         """Return image histograms from decoded data and detected frames.
 
         This function may fail to produce expected results when settings
-        were recorded incorrectly, scanner and FlimBox frequencies were out
+        were recorded incorrectly, scanner and FLIMbox frequencies were out
         of sync, or scanner settings were changed during acquisition.
 
         Parameters
@@ -3018,22 +3021,36 @@ class SimfcsFbd(LfdFile):
         return result
 
     def _asarray(self, **kwargs):
-        """Read FlimBox data stream from file and return decoded data."""
+        """Read FLIMbox data stream from file and return decoded data."""
         return self.decode(data=None, **kwargs)
 
     def _plot(self, figure, **kwargs):
         """Plot lifetime histogram for all channels."""
         ax = figure.add_subplot(1, 1, 1)
         ax.set_title(self._filename)
+        ax.set_xlabel('Bin')
+        ax.set_ylabel('Counts')
         ax.set_xlim([0, self.pmax // self.pdiv - 1])
         bins, times, markers = self.decode()
-        for bins_channel in bins:
+        for ch, bins_channel in enumerate(bins):
             histogram = numpy.bincount(bins_channel[bins_channel >= 0])
-            ax.plot(histogram)
+            ax.plot(histogram, label=f'Ch{ch}')
+        ax.legend()
 
     def _str(self):
         """Return additional information about file."""
-        return '\n '.join(f'{a}: {getattr(self, a)}' for a in self._attributes)
+        info = [f'{a}: {getattr(self, a)}' for a in self._attributes]
+        if self._fbf is not None:
+            info.append('firmware:')
+            info.extend(f' {k}: {v}'[:64] for k, v in self._fbf.items())
+        if self._header is not None:
+            info.append('header:')
+            info.extend(
+                f' {k}: {self._header[k]}'[:64]
+                for k, _ in self._header_t
+                if k[0] != '_'
+            )
+        return '\n '.join(info)
 
 
 def simfcsfbd_decode(
@@ -3055,7 +3072,7 @@ def simfcsfbd_decode(
     win_mask,
     win_shr,
 ):
-    """Decode FlimBox data stream.
+    """Decode FLIMbox data stream.
 
     See the documentation of the SimfcsFbd class for parameter descriptions
     and the lfdfiles.pyx file for a faster implementation.
@@ -3105,7 +3122,7 @@ def simfcsfbd_decode(
 def simfcsfbd_histogram(
     bins, times, frame_markers, units_per_sample, scanner_frame_start, out
 ):
-    """Calculate histograms from decoded FlimBox data and frame markers.
+    """Calculate histograms from decoded FLIMbox data and frame markers.
 
     See the documentation of the SimfcsFbd class for parameter descriptions
     and the lfdfiles.pyx file for a much faster implementation.
@@ -3338,7 +3355,7 @@ class GlobalsAscii(LfdFile):
 
         self._fh.seek(0)
         content = self._fh.read()
-        self._filesize = len(content)
+        self._fsize = len(content)
         # parse keys and values
         self._record = {}
         matches = re.findall(
@@ -3416,6 +3433,105 @@ class GlobalsAscii(LfdFile):
     def __getitem__(self, key=0):
         """Return value of key in record."""
         return self._record[key]
+
+
+class VistaIfi(LfdFile):
+    """VistaVision fluorescence intensity image.
+
+    VistaVision IFI files contain multi-dimensional confocal intensity images.
+
+    After a header of 256 bytes, the images are stored as float32 in CZYX
+    order.
+
+    Attributes
+    ----------
+    header : numpy.recarray
+        File header.
+
+    Examples
+    --------
+    >>> f = VistaIfi('vista.ifi')
+    >>> data = f.asarray()
+    >>> f.axes
+    'CYX'
+    >>> print(f.header.dwelltime)
+    0.1
+    >>> data.shape
+    (2, 128, 128)
+    >>> f.totiff('_vista.ifi.tif')
+    >>> f.close()
+    >>> with TiffFile('_vista.ifi.tif') as f:
+    ...     assert_array_equal(f.asarray(), data)
+
+    """
+
+    _filepattern = r'.*\.ifi$'
+
+    _header_t = numpy.dtype(
+        [
+            # undocumented file header
+            ('signature', 'a10'),  # 'VISTAIMAGE'
+            ('version', 'u2'),
+            ('channel_bits', 'u2'),
+            ('dimensions', 'u2', 3),  # XYZ
+            ('boundaries', 'f4', 6),
+            ('dwelltime', 'f4'),
+        ]
+    )
+
+    def _init(self):
+        """Read header and metadata from file."""
+        self.header = h = numpy.rec.fromfile(
+            self._fh, self._header_t, 1, byteorder='<'
+        )[0]
+        if h['signature'] != b'VISTAIMAGE':
+            raise LfdFileError(self)
+        if h['version'] not in (4,):
+            log_warning(f'unrecognized VistaIfi file version {h["version"]}')
+        self.shape = tuple(int(i) for i in reversed(h['dimensions']))
+        if self.shape[0] == 1:
+            self.shape = self.shape[1:]
+            self.axes = 'YX'
+        else:
+            self.axes = 'ZYX'
+        indices = self.channel_indices
+        if len(indices) > 1:
+            self.shape = (len(indices),) + self.shape
+            self.axes = 'C' + self.axes
+        self.dtype = numpy.dtype('float32')
+
+    def __getitem__(self, key):
+        """Return header attribute."""
+        return self.header[key]
+
+    @property
+    def channel_indices(self):
+        """Return indices of valid channels."""
+        bits = self.header['channel_bits']
+        return tuple(i for i in range(8) if bits & 2 ** i)
+
+    def _asarray(self):
+        """Return image data from file."""
+        self._fh.seek(256)
+        data = numpy.fromfile(self._fh, '<f4', product(self.shape))
+        data.shape = self.shape
+        return data
+
+    def _totiff(self, tif, **kwargs):
+        """Write image data to TIFF file."""
+        update_kwargs(kwargs, metadata={'axes': self.axes})
+        data = self.asarray()
+        tif.save(data, **kwargs)
+
+    def _str(self):
+        """Return additional information about file."""
+        info = ['header:']
+        info.extend(
+            f' {k}: {self.header[k]}'[:64]
+            for k in self._header_t.names
+            if k[0] != '_'
+        )
+        return '\n '.join(info)
 
 
 class VistaIfli(LfdFile):
@@ -3505,7 +3621,7 @@ class VistaIfli(LfdFile):
         """Return header attribute."""
         return self.header[key]
 
-    @lazyattr
+    @property
     def channel_indices(self):
         """Return indices of valid channels."""
         bits = self.header['channel_bits']
@@ -3566,6 +3682,16 @@ class VistaIfli(LfdFile):
         data = numpy.moveaxis(data, -2, 0)
         data = numpy.moveaxis(data, -1, 0)
         tif.save(data, **kwargs)
+
+    def _str(self):
+        """Return additional information about file."""
+        info = ['header:']
+        info.extend(
+            f' {k}: {self.header[k]}'[:64]
+            for k in self._header_t(1).names
+            if k[0] != '_'
+        )
+        return '\n '.join(info)
 
 
 class FlimfastFlif(LfdFile):
