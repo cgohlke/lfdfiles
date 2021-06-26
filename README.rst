@@ -11,7 +11,7 @@ experimental data and metadata at the `Laboratory for Fluorescence Dynamics
 * CCP4 MAP
 * Vaa3D RAW
 * Bio-Rad(r) PIC
-* Vista IFLI
+* Vista IFLI, IFI
 * FlimFast FLIF
 
 For command line usage run ``python -m lfdfiles --help``
@@ -24,7 +24,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.6.6
+:Version: 2021.6.25
 
 Requirements
 ------------
@@ -34,7 +34,7 @@ This release has been tested with the following requirements and dependencies
 * `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
 * `Cython 0.29.23 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2021.4.8 <https://pypi.org/project/tifffile/>`_  (optional)
+* `Tifffile 2021.6.14 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
 * `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
 * `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
@@ -45,6 +45,12 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.6.25
+    Read ISS Vista IFI files.
+    Fix reading FBD files with FBF header.
+    Fix reading R64 files with excess bytes.
+    Fix reading VPL files used by ISS Vista.
+    Remove lazyattr.
 2021.6.6
     Fix unclosed file warnings.
     Replace TIFF compress with compression parameter (breaking).
@@ -62,14 +68,13 @@ Revisions
     Read Netpbm formats via netpbmfile module.
     Add B64, Z64, and I64 write functions.
     Remove support for Python 2.7 and 3.5.
-    Update copyright.
 2019.7.2
    Require tifffile 2019.7.2.
    Remove some utility functions.
 2019.5.22
     Read and write Bio-Rad(tm) PIC files.
     Read and write Voxx MAP palette files.
-    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw.
+    Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw (breaking).
     Rename save functions.
 2019.4.22
     Fix setup requirements.
@@ -98,7 +103,7 @@ Revisions
 2014.4.8
     Read and write CCP4 MAP volume files.
 2013.8.10
-    Read second harmonics FlimBox data.
+    Read second harmonics FLIMbox data.
 
 Notes
 -----
@@ -174,7 +179,7 @@ The following software is referenced in this module:
 10. `Vaa3D <https://github.com/Vaa3D>`_ is software for multi-dimensional
     data visualization and analysis, developed by the Hanchuan Peng group at
     the Allen Institute.
-11. `Voxx <http://www.indiana.edu/~voxx/>`_ is a volume rendering program
+11. `Voxx <https://voxx.sitehost.iu.edu/>`_ is a volume rendering program
     for 3D microscopy, developed by Jeff Clendenon et al. at the Indiana
     University.
 12. `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
