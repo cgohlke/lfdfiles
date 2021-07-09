@@ -82,7 +82,7 @@ ext_modules = [
     ),
 ]
 
-setup_args = dict(
+setup(
     name='lfdfiles',
     version=version,
     description=description,
@@ -109,6 +109,8 @@ setup_args = dict(
     tests_require=['pytest'],
     packages=['lfdfiles'],
     entry_points={'console_scripts': ['lfdfiles=lfdfiles.__main__:main']},
+    ext_modules=ext_modules,
+    cmdclass={'build_ext': build_ext},
     license='BSD',
     zip_safe=False,
     platforms=['any'],
@@ -126,21 +128,3 @@ setup_args = dict(
         'Programming Language :: Python :: 3.10',
     ],
 )
-
-try:
-    if '--universal' in sys.argv:
-        raise ValueError(
-            'Not building the _lfdfiles Cython extension in universal mode'
-        )
-    setup(
-        ext_modules=ext_modules,
-        cmdclass={'build_ext': build_ext},
-        **setup_args,
-    )
-except Exception as e:
-    warnings.warn(str(e))
-    warnings.warn(
-        'The _lfdfiles Cython extension module was not built.\n'
-        'Using a fallback module with limited functionality and performance.'
-    )
-    setup(**setup_args)
