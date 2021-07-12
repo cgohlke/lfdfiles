@@ -24,17 +24,17 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.6.25
+:Version: 2021.7.11
 
 Requirements
 ------------
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-* `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
+* `CPython 3.7.9, 3.8.10, 3.9.6 64-bit <https://www.python.org>`_
 * `Cython 0.29.23 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2021.6.14 <https://pypi.org/project/tifffile/>`_  (optional)
+* `Tifffile 2021.7.2 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
 * `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
 * `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
@@ -45,6 +45,9 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.7.11
+    Calculate pixel_dwell_time and frame_size for FBD files with header.
+    Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
 2021.6.25
     Read ISS Vista IFI files.
     Fix reading FBD files with FBF header.
