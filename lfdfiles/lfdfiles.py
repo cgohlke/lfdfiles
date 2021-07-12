@@ -54,17 +54,17 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.6.25
+:Version: 2021.7.11
 
 Requirements
 ------------
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-* `CPython 3.7.9, 3.8.10, 3.9.5 64-bit <https://www.python.org>`_
+* `CPython 3.7.9, 3.8.10, 3.9.6 64-bit <https://www.python.org>`_
 * `Cython 0.29.23 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2021.6.14 <https://pypi.org/project/tifffile/>`_  (optional)
+* `Tifffile 2021.7.2 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
 * `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
 * `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
@@ -75,6 +75,9 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.7.11
+    Calculate pixel_dwell_time and frame_size for FBD files with header.
+    Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
 2021.6.25
     Read ISS Vista IFI files.
     Fix reading FBD files with FBF header.
@@ -217,7 +220,7 @@ The following software is referenced in this module:
 
 """
 
-__version__ = '2021.6.25'
+__version__ = '2021.7.11'
 
 __all__ = (
     'LfdFile',
@@ -2234,13 +2237,13 @@ class SimfcsFbd(LfdFile):
     laser_frequency : float
         Laser frequency in Hz. Default is 20000000 Hz, the internal
         FLIMbox frequency.
-    correction_factor : float
+    laser_factor : float
         Factor to correct dwell_time/laser_frequency when the scanner
         clock is not known exactly. Default is 1.0.
     scanner : str
         Acquisition software or hardware.
-    scanner_line_add : int
-        Number of pixels/samples added to each line (for retrace).
+    scanner_line_length : int
+        Number of pixels/samples in each line, including retrace.
     scanner_line_start : int
         Index of first valid pixel/sample in scan line.
     scanner_frame_start : int
@@ -2271,9 +2274,10 @@ class SimfcsFbd(LfdFile):
         'pdiv',
         'pixel_dwell_time',
         'laser_frequency',
-        'correction_factor',
+        'laser_factor',
+        'synthesizer',
         'scanner',
-        'scanner_line_add',
+        'scanner_line_length',
         'scanner_line_start',
         'scanner_frame_start',
     )
@@ -2379,12 +2383,12 @@ class SimfcsFbd(LfdFile):
         },
         'Z': {
             'name': 'Zeiss LSM710',
-            'A': (6.39, 344, 2, 0),
-            'D': (51.21, 176, 8, 414),
+            'A': (6.305, 344, 2, 0),
             'B': (12.79, 344, 2, 0),
-            'E': (102.39, 88, 10, 242),
-            'C': (25.61, 344, 2, 0),
-            'F': (204.79, 12, 10, 0),
+            'C': (25.216, 344, 2, 0),
+            'D': (50.42, 176, 8, 414),
+            'E': (100.85, 88, 10, 242),
+            'F': (177.32, 12, 10, 0),
         },
         'I': {
             'name': 'ISS Vista slow scanner',
@@ -2502,9 +2506,13 @@ class SimfcsFbd(LfdFile):
         1000,
         2000,
     )
+
     _header_frame_size = (64, 128, 256, 320, 512, 640, 800, 1024)
+
     _header_bin_pixel_by = (1, 2, 4, 8)
+
     _header_windows = (4, 8, 16, 32, 64)
+
     _header_channels = (
         1,
         2,
@@ -2514,8 +2522,9 @@ class SimfcsFbd(LfdFile):
         2,  # 2 ch 8w Spartan6
         4,  # 4 ch 16w frame
     )
-    _header_scanner_types = (
-        'None',  # IOTech scanner card
+
+    _header_scanners = (
+        'IOTech scanner card',
         'Native SimFCS, 3-axis card',
         'Olympus FV 1000, NI USB',
         'Zeiss LSM510',
@@ -2529,7 +2538,8 @@ class SimfcsFbd(LfdFile):
         'Olympus FV3000',
         'Olympus 2P',
     )
-    _header_synthesizer_names = (
+
+    _header_synthesizers = (
         'Internal FLIMbox frequency',
         'Fianium',
         'Spectra Physics MaiTai',
@@ -2712,30 +2722,82 @@ class SimfcsFbd(LfdFile):
             hdr = self._header
             if hdr['owner'] != 0:
                 raise ValueError(f"unknown header format '{hdr['owner']}'")
-            self.frame_size = self._header_frame_size[hdr['frame_size_index']]
-            self.scanner = self._header_scanner_types[hdr['scanner_index']]
-            self.pixel_dwell_time = self._header_pixel_dwell_time[
-                hdr['pixel_dwell_time_index']
-            ]
-            self.scanner_line_add = int(hdr['line_length']) - self.frame_size
+
+            windows = self._header_windows[hdr['windows_index']]
+            self.windows = self._fbf.get('windows', windows)
+            if self.windows != windows:
+                log_warning(
+                    'SimfcsFbd: '
+                    'windows mismatch between FBF and FBD header '
+                    f'({self.windows!r} != {windows!r})'
+                )
+
+            channels = self._header_channels[hdr['channels_index']]
+            self.channels = self._fbf.get('channels', channels)
+            if self.channels != channels:
+                log_warning(
+                    'SimfcsFbd: '
+                    'channels mismatch between FBF and FBD header '
+                    f'({self.channels!r} != {channels!r})'
+                )
+
+            try:
+                self.harmonics = (1, 2)[self._fbf['secondharmonic']]
+            except (KeyError, IndexError):
+                raise ValueError('corrupted FLIMbox firmware header')
+
+            try:
+                self.synthesizer = self._header_synthesizers[
+                    hdr['synthesizer_index']
+                ]
+            except IndexError:
+                self.synthesizer = 'Unknown'
+
+            try:
+                self.scanner = self._header_scanners[hdr['scanner_index']]
+            except IndexError:
+                self.scanner = 'Unknown'
+
+            self.laser_frequency = float(hdr['laser_frequency'])
+            self.laser_factor = float(hdr['laser_factor'])
+
+            self.scanner_line_length = int(hdr['line_length'])
             self.scanner_line_start = int(hdr['x_starting_pixel'])
             self.scanner_frame_start = 0
-            self.windows = self._header_windows[hdr['windows_index']]
-            self.channels = self._header_channels[hdr['channels_index']]
-            self.harmonics = (1, 2)[self._fbf['secondharmonic']]
-            self.laser_frequency = float(hdr['laser_frequency'])
-            self.correction_factor = float(hdr['laser_factor'])
-            assert self.windows == self._fbf['windows']
-            assert self.channels == self._fbf['channels']
+
+            # calculate frame_size and pixel_dwell_time
+            # 1. not always square size
+            # self.frame_size = self._header_frame_size[
+            #     hdr['frame_size_index']
+            # ]
+            # 2. doesn't work
+            # self.pixel_dwell_time = self._header_pixel_dwell_time[
+            #     hdr['pixel_dwell_time_index']
+            # ]
+            # 3. not good enough
+            # self.pixel_dwell_time = (
+            #     float(hdr['line_time']) / float(hdr['line_length'])
+            # )
+            # 4. use frame_time and assume square frame_size
+            self.frame_size = round(hdr['frame_time'] / hdr['line_time'])
+            for frame_size in self._header_frame_size:
+                if abs(self.frame_size - frame_size) < 3:
+                    self.frame_size = frame_size
+                    break
+            self.pixel_dwell_time = float(hdr['frame_time']) / (
+                self.frame_size * self.scanner_line_length
+            )
             self._data_offset = 32768  # start of encoded data
+
         else:
             self._fbf = None
             self._header = None
             self.frame_size = self._frame_size[code[0]]
+            self.synthesizer = 'Unknown'
             self.scanner = self._scanner_settings[code[3]]['name']
             (
                 self.pixel_dwell_time,
-                self.scanner_line_add,
+                scanner_line_add,
                 self.scanner_line_start,
                 self.scanner_frame_start,
             ) = self._scanner_settings[code[3]][code[1]]
@@ -2744,8 +2806,9 @@ class SimfcsFbd(LfdFile):
                 self.channels,
                 self.harmonics,
             ) = self._flimbox_settings[code[2]]
-            self.laser_frequency = 20000000
-            self.correction_factor = 1.0
+            self.scanner_line_length = self.frame_size + scanner_line_add
+            self.laser_frequency = 20000000 * self.harmonics
+            self.laser_factor = 1.0
             self._data_offset = 0
 
         i = self.windows, self.channels, self.harmonics
@@ -2762,16 +2825,18 @@ class SimfcsFbd(LfdFile):
             assert k in self._attributes
             setattr(self, k, v)
 
-        assert self.harmonics in (1, 2)
-        self.laser_frequency *= self.harmonics
+    @property
+    def scanner_line_add(self):
+        """Return number of pixels/samples added to each line (for retrace)."""
+        return self.scanner_line_length - self.frame_size
 
+    @property
     def units_per_sample(self):
         """Return number of FLIMbox units per scanner sample."""
-        return (self.pixel_dwell_time / 1000000) * (
-            self.pmax
-            / (self.pmax - 1)
-            * self.laser_frequency
-            * self.correction_factor
+        return (
+            (self.pixel_dwell_time * 1e-6)
+            * (self.pmax / (self.pmax - 1))
+            * (self.laser_frequency * self.laser_factor)
         )
 
     def decode(
@@ -2787,7 +2852,7 @@ class SimfcsFbd(LfdFile):
         Parameters
         ----------
         data : ndarray or None
-            Flimbox data stream. If None (default), read data from file.
+            FLIMbox data stream. If None (default), read data from file.
         word_count : int (optional)
             Number of data words to process (default: -1, all words).
         skip_words : int (optional)
@@ -2880,8 +2945,7 @@ class SimfcsFbd(LfdFile):
             decoded = self.decode(**kwargs)
         times, markers = decoded[-2:]
 
-        line_len = self.frame_size + self.scanner_line_add
-        line_time = line_len * self.units_per_sample()
+        line_time = self.scanner_line_length * self.units_per_sample
         frame_durations = numpy.ediff1d(times[markers])
 
         frame_markers = []
@@ -2921,12 +2985,10 @@ class SimfcsFbd(LfdFile):
             clusters = list(sorted(clusters, key=lambda x: x[1], reverse=True))
             # possible correction factors, assuming square frame shape
             line_num = self.frame_size
-            correction_factors = [
-                c[0] / (line_time * line_num) for c in clusters
-            ]
+            laser_factors = [c[0] / (line_time * line_num) for c in clusters]
             # select specified frame cluster
-            frame_cluster = min(frame_cluster, len(correction_factors) - 1)
-            self.correction_factor = correction_factors[frame_cluster]
+            frame_cluster = min(frame_cluster, len(laser_factors) - 1)
+            self.laser_factor = laser_factors[frame_cluster]
             frame_markers = [
                 (int(markers[i]), int(markers[i + 1]) - 1)
                 for i, c in enumerate(cluster_indices)
@@ -2935,12 +2997,12 @@ class SimfcsFbd(LfdFile):
             msg = [
                 f'no frames detected with default settings.'
                 f'Using square shape and correction factor '
-                f'{self.correction_factor:.5f}.'
+                f'{self.laser_factor:.5f}.'
             ]
-            if len(correction_factors) > 1:
+            if len(laser_factors) > 1:
                 msg.append(
                     'The most probable correction factors are: {}'.format(
-                        ', '.join(f'{i:.5f}' for i in correction_factors[:4])
+                        ', '.join(f'{i:.5f}' for i in laser_factors[:4])
                     )
                 )
             warnings.warn('\n'.join(msg))
@@ -2950,7 +3012,7 @@ class SimfcsFbd(LfdFile):
         frame_markers = frame_markers[select_frames]
         if not frame_markers:
             raise ValueError('no frames selected')
-        return (line_num, line_len), frame_markers
+        return (line_num, self.scanner_line_length), frame_markers
 
     def asimage(
         self, decoded, frames, integrate_frames=1, square_frame=True, **kwargs
@@ -3004,7 +3066,7 @@ class SimfcsFbd(LfdFile):
             bins,
             times,
             frame_markers,
-            self.units_per_sample(),
+            self.units_per_sample,
             self.scanner_frame_start,
             result,
         )
@@ -3078,6 +3140,9 @@ def simfcsfbd_decode(
     and the lfdfiles.pyx file for a faster implementation.
 
     """
+    # this implementation is for reference only. Do not use
+    from ._lfdfiles import simfcsfbd_decode  # noqa
+
     tcc = data & tcc_mask  # cross correlation time
     if tcc_shr:
         tcc >>= tcc_shr
@@ -3128,7 +3193,9 @@ def simfcsfbd_histogram(
     and the lfdfiles.pyx file for a much faster implementation.
 
     """
-    # warnings.warn('patience, please.')
+    # this implementation is for reference only. Do not use
+    from ._lfdfiles import simfcsfbd_histogram  # noqa
+
     nframes, nchannels, frame_length, nwindows = out.shape
     for f, (j, k) in enumerate(frame_markers):
         f = f % nframes
@@ -3588,7 +3655,7 @@ class VistaIfli(LfdFile):
                 ('line_interval_time', 'f4'),
                 ('frame_interval_time', 'f4'),
                 ('number_frequencies', 'i4'),
-                ('frequencies', 'f4', number_frequencies),
+                ('frequencies', 'f4', (number_frequencies,)),
                 ('cross_frequency', 'f4'),
                 ('reference_lifetime', 'f4'),  # ns
                 ('reference_phasor', 'f4', (number_frequencies, 3)),
