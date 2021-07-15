@@ -24,7 +24,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.7.11
+:Version: 2021.7.15
 
 Requirements
 ------------
@@ -32,7 +32,7 @@ This release has been tested with the following requirements and dependencies
 (other versions may work):
 
 * `CPython 3.7.9, 3.8.10, 3.9.6 64-bit <https://www.python.org>`_
-* `Cython 0.29.23 <https://cython.org>`_ (build)
+* `Cython 0.29.24 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
 * `Tifffile 2021.7.2 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
@@ -45,6 +45,9 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.7.15
+    Refactor SimfcsFbd initialization.
+    Print tracebacks of failing plugins in LfdFile.
 2021.7.11
     Calculate pixel_dwell_time and frame_size for FBD files with header.
     Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
