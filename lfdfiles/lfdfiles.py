@@ -54,7 +54,7 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.7.11
+:Version: 2021.7.15
 
 Requirements
 ------------
@@ -62,7 +62,7 @@ This release has been tested with the following requirements and dependencies
 (other versions may work):
 
 * `CPython 3.7.9, 3.8.10, 3.9.6 64-bit <https://www.python.org>`_
-* `Cython 0.29.23 <https://cython.org>`_ (build)
+* `Cython 0.29.24 <https://cython.org>`_ (build)
 * `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
 * `Tifffile 2021.7.2 <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
@@ -75,6 +75,9 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+2021.7.15
+    Refactor SimfcsFbd initialization.
+    Print tracebacks of failing plugins in LfdFile.
 2021.7.11
     Calculate pixel_dwell_time and frame_size for FBD files with header.
     Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
@@ -220,7 +223,7 @@ The following software is referenced in this module:
 
 """
 
-__version__ = '2021.7.11'
+__version__ = '2021.7.15'
 
 __all__ = (
     'LfdFile',
@@ -401,6 +404,7 @@ class LfdFile(LfdFileBase):
             if not validate:
                 # skip formats that are too generic
                 skip.update((SimfcsBh, SimfcsCyl, SimfcsFbd, FliezI16))
+        exceptions = []
         for lfdfile in registry:
             if lfdfile in skip:
                 continue
@@ -409,11 +413,20 @@ class LfdFile(LfdFileBase):
                     pass
             except FileNotFoundError:
                 raise
-            except Exception:
+            except Exception as exc:
+                if 'does not match' not in str(exc):
+                    import traceback
+
+                    exceptions.append(
+                        f'\n{lfdfile.__name__}\n\n{traceback.format_exc()}'
+                    )
                 continue
             else:
                 return super().__new__(lfdfile)
-        raise LfdFileError('failed to read file using any LfdFile class')
+        raise LfdFileError(
+            'failed to read file using any LfdFile class.\n'
+            + '\n'.join(exceptions)
+        )
 
     def __init__(self, filename, *args, **kwargs):
         """Open file(s) and read headers and metadata.
@@ -2248,6 +2261,10 @@ class SimfcsFbd(LfdFile):
         Index of first valid pixel/sample in scan line.
     scanner_frame_start : int
         Index of first valid pixel/sample after marker.
+    fbf : dict
+        FLIMbox firmware header settings, if any.
+    header : _header_t
+        FLIMbox file header, if any.
 
     Examples
     --------
@@ -2683,8 +2700,25 @@ class SimfcsFbd(LfdFile):
         # TODO
         raise NotImplementedError()
 
-    def _init(self, code=None, **kwargs):
-        """Initialize attributes from file name code and additional parameters.
+    def _init(
+        self,
+        code=None,
+        frame_size=None,
+        windows=None,
+        channels=None,
+        harmonics=None,
+        pmax=None,
+        pdiv=None,
+        pixel_dwell_time=None,
+        laser_frequency=None,
+        laser_factor=None,
+        scanner_line_length=None,
+        scanner_line_start=None,
+        scanner_frame_start=None,
+        scanner=None,
+        synthesizer=None,
+    ):
+        """Initialize instance from file name code or file header.
 
         Parameters
         ----------
@@ -2697,133 +2731,204 @@ class SimfcsFbd(LfdFile):
             Optional named parameters to override instance attributes.
 
         """
-        if not code:
+
+        self.code = code
+        self.frame_size = frame_size
+        self.windows = windows
+        self.channels = channels
+        self.harmonics = harmonics
+        self.pmax = pmax
+        self.pdiv = pdiv
+        self.pixel_dwell_time = pixel_dwell_time
+        self.laser_frequency = laser_frequency
+        self.laser_factor = laser_factor
+        self.scanner_line_length = scanner_line_length
+        self.scanner_line_start = scanner_line_start
+        self.scanner_frame_start = scanner_frame_start
+        self.scanner = scanner
+        self.synthesizer = synthesizer
+
+        self.fbf = None
+        self.header = None
+        self._data_offset = 0
+
+        if self.code is None:
             try:
-                code = re.search(
+                self.code = re.search(
                     r'.*\$([A-Z0]{4,4})\.fbd', self._filename, re.IGNORECASE
                 ).group(1)
             except AttributeError:
-                pass
-        if not code:
-            code = 'CFCS'  # old FLIMbox file ?
-            warnings.warn(
-                f"failed to detect settings from file name;"
-                f"assuming a '{code}' file"
-            )
+                self.code = 'CFCS'  # old FLIMbox file ?
+                warnings.warn(
+                    "SimfcsFbd: failed to parse code from file name. "
+                    "Using 'CFCS'"
+                )
 
-        if code[2] == '0':
-            # New FBD file format with header
-            # the first 1024 bytes contain the start of a FLIMbox firmware file
-            with SimfcsFbf(self._fh.name, validate=False) as fbf:
-                self._fbf = fbf._settings
-            # the next 31kB contain the binary file header
-            self._fh.seek(1024, 0)
-            self._header = numpy.fromfile(self._fh, self._header_t, 1)[0]
-            hdr = self._header
-            if hdr['owner'] != 0:
-                raise ValueError(f"unknown header format '{hdr['owner']}'")
+        if self.code[2] == '0':
+            self._from_header()
+        else:
+            self._from_code()
 
+        if self.pmax is None or self.pdiv is None:
+            try:
+                pmax, pdiv = self._histogram_settings[
+                    (self.windows, self.channels, self.harmonics)
+                ]
+            except IndexError as exc:
+                raise NotImplementedError(
+                    f'can not handle {self.windows} windows, '
+                    f'{self.channels} channels, {self.harmonics} harmonics'
+                ) from exc
+            else:
+                if self.pmax is None:
+                    self.pmax = pmax
+                if self.pdiv is None:
+                    self.pdiv = pdiv
+
+        for attr in self._attributes:
+            if getattr(self, attr) is None:
+                raise ValueError(f"'{attr}' not initialized")
+
+    def _from_code(self):
+        """Initialize instance from file name code."""
+        code = self.code
+        if self.frame_size is None:
+            self.frame_size = self._frame_size[code[0]]
+        if (
+            self.windows is None
+            or self.channels is None
+            or self.harmonics is None
+        ):
+            windows, channels, harmonics = self._flimbox_settings[code[2]]
+            if self.windows is None:
+                self.windows = windows
+            if self.channels is None:
+                self.channels = channels
+            if self.harmonics is None:
+                self.harmonics = harmonics
+        if (
+            self.pixel_dwell_time is None
+            or self.scanner_line_length is None
+            or self.scanner_line_start is None
+            or self.scanner_frame_start is None
+        ):
+            (
+                pixel_dwell_time,
+                scanner_line_add,
+                scanner_line_start,
+                scanner_frame_start,
+            ) = self._scanner_settings[code[3]][code[1]]
+            if self.pixel_dwell_time is None:
+                self.pixel_dwell_time = pixel_dwell_time
+            if self.scanner_frame_start is None:
+                self.scanner_frame_start = scanner_frame_start
+            if self.scanner_line_start is None:
+                self.scanner_line_start = scanner_line_start
+            if self.scanner_line_length is None:
+                self.scanner_line_length = self.frame_size + scanner_line_add
+        if self.scanner is None:
+            self.scanner = self._scanner_settings[code[3]]['name']
+        if self.synthesizer is None:
+            self.synthesizer = 'Unknown'
+        if self.laser_frequency is None:
+            self.laser_frequency = 20000000 * self.harmonics
+        if self.laser_factor is None:
+            self.laser_factor = 1.0
+
+    def _from_header(self):
+        """Initialize instance from 32 KB file header."""
+        # the first 1024 bytes contain the start of a FLIMbox firmware file
+        self._fh.seek(0)
+        with SimfcsFbf(self._fh.name, validate=False) as fbf:
+            self.fbf = fbf._settings
+
+        # the next 31kB contain the binary file header
+        self._fh.seek(1024)
+        self.header = numpy.fromfile(self._fh, self._header_t, 1)[0]
+        hdr = self.header
+        if hdr['owner'] != 0:
+            raise ValueError(f"unknown header format '{hdr['owner']}'")
+
+        if self.harmonics is None:
+            self.harmonics = (1, 2)[self.fbf['secondharmonic']]
+        if self.windows is None:
             windows = self._header_windows[hdr['windows_index']]
-            self.windows = self._fbf.get('windows', windows)
+            self.windows = self.fbf.get('windows', windows)
             if self.windows != windows:
                 log_warning(
                     'SimfcsFbd: '
                     'windows mismatch between FBF and FBD header '
                     f'({self.windows!r} != {windows!r})'
                 )
-
+        if self.channels is None:
             channels = self._header_channels[hdr['channels_index']]
-            self.channels = self._fbf.get('channels', channels)
+            self.channels = self.fbf.get('channels', channels)
             if self.channels != channels:
                 log_warning(
                     'SimfcsFbd: '
                     'channels mismatch between FBF and FBD header '
                     f'({self.channels!r} != {channels!r})'
                 )
-
-            try:
-                self.harmonics = (1, 2)[self._fbf['secondharmonic']]
-            except (KeyError, IndexError):
-                raise ValueError('corrupted FLIMbox firmware header')
-
+        if self.synthesizer is None:
             try:
                 self.synthesizer = self._header_synthesizers[
                     hdr['synthesizer_index']
                 ]
             except IndexError:
                 self.synthesizer = 'Unknown'
-
+        if self.scanner is None:
             try:
                 self.scanner = self._header_scanners[hdr['scanner_index']]
             except IndexError:
                 self.scanner = 'Unknown'
-
+        if self.laser_frequency is None:
             self.laser_frequency = float(hdr['laser_frequency'])
+        if self.laser_factor is None:
             self.laser_factor = float(hdr['laser_factor'])
-
+        if self.scanner_line_length is None:
             self.scanner_line_length = int(hdr['line_length'])
+        if self.scanner_line_start is None:
             self.scanner_line_start = int(hdr['x_starting_pixel'])
+        if self.scanner_frame_start is None:
             self.scanner_frame_start = 0
 
-            # calculate frame_size and pixel_dwell_time
-            # 1. not always square size
-            # self.frame_size = self._header_frame_size[
-            #     hdr['frame_size_index']
-            # ]
-            # 2. doesn't work
-            # self.pixel_dwell_time = self._header_pixel_dwell_time[
-            #     hdr['pixel_dwell_time_index']
-            # ]
-            # 3. not good enough
-            # self.pixel_dwell_time = (
-            #     float(hdr['line_time']) / float(hdr['line_length'])
-            # )
-            # 4. use frame_time and assume square frame_size
-            self.frame_size = round(hdr['frame_time'] / hdr['line_time'])
-            for frame_size in self._header_frame_size:
-                if abs(self.frame_size - frame_size) < 3:
-                    self.frame_size = frame_size
-                    break
-            self.pixel_dwell_time = float(hdr['frame_time']) / (
-                self.frame_size * self.scanner_line_length
-            )
-            self._data_offset = 32768  # start of encoded data
-
+        if hdr['frame_time'] >= hdr['line_time'] > 1.0:
+            if self.frame_size is None:
+                self.frame_size = round(hdr['frame_time'] / hdr['line_time'])
+                for frame_size in self._header_frame_size:
+                    if abs(self.frame_size - frame_size) < 3:
+                        self.frame_size = frame_size
+                        break
+            if self.pixel_dwell_time is None:
+                self.pixel_dwell_time = float(
+                    hdr['frame_time']
+                    / (self.frame_size * self.scanner_line_length)
+                )
         else:
-            self._fbf = None
-            self._header = None
-            self.frame_size = self._frame_size[code[0]]
-            self.synthesizer = 'Unknown'
-            self.scanner = self._scanner_settings[code[3]]['name']
-            (
-                self.pixel_dwell_time,
-                scanner_line_add,
-                self.scanner_line_start,
-                self.scanner_frame_start,
-            ) = self._scanner_settings[code[3]][code[1]]
-            (
-                self.windows,
-                self.channels,
-                self.harmonics,
-            ) = self._flimbox_settings[code[2]]
-            self.scanner_line_length = self.frame_size + scanner_line_add
-            self.laser_frequency = 20000000 * self.harmonics
-            self.laser_factor = 1.0
-            self._data_offset = 0
+            if self.frame_size is None:
+                try:
+                    self.frame_size = round(
+                        self._header_frame_size[hdr['frame_size_index']]
+                    )
+                except IndexError:
+                    # fall back to filename
+                    if self.code is not None:
+                        self.frame_size = self._frame_size[self.code[0]]
+            if self.pixel_dwell_time is None:
+                try:
+                    # use file name
+                    dwt = self._scanner_settings[self.code[3]][self.code[1]][0]
+                except (IndexError, KeyError, TypeError):
+                    try:
+                        dwt = self._header_pixel_dwell_time[
+                            hdr['pixel_dwell_time_index']
+                        ]
+                    except IndexError:
+                        dwt = 1.0
+                finally:
+                    self.pixel_dwell_time = dwt
 
-        i = self.windows, self.channels, self.harmonics
-        try:
-            self.pmax, self.pdiv = self._histogram_settings[i]
-        except IndexError as exc:
-            raise NotImplementedError(
-                f'can not handle {self.windows} windows, '
-                f'{self.channels} channels, {self.harmonics} harmonics'
-            ) from exc
-
-        # override attributes with those specified by user
-        for k, v in kwargs.items():
-            assert k in self._attributes
-            setattr(self, k, v)
+        self._data_offset = 32768  # start of encoded data
 
     @property
     def scanner_line_add(self):
@@ -3102,13 +3207,13 @@ class SimfcsFbd(LfdFile):
     def _str(self):
         """Return additional information about file."""
         info = [f'{a}: {getattr(self, a)}' for a in self._attributes]
-        if self._fbf is not None:
+        if self.fbf is not None:
             info.append('firmware:')
-            info.extend(f' {k}: {v}'[:64] for k, v in self._fbf.items())
-        if self._header is not None:
+            info.extend(f' {k}: {v}'[:64] for k, v in self.fbf.items())
+        if self.header is not None:
             info.append('header:')
             info.extend(
-                f' {k}: {self._header[k]}'[:64]
+                f' {k}: {self.header[k]}'[:64]
                 for k, _ in self._header_t
                 if k[0] != '_'
             )
