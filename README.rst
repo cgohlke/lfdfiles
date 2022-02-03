@@ -2,9 +2,10 @@ Laboratory for Fluorescence Dynamics (LFD) file formats
 =======================================================
 
 Lfdfiles is a Python library and console script for reading, writing,
-converting, and viewing many of the proprietary file formats used to store
-experimental data and metadata at the `Laboratory for Fluorescence Dynamics
-<https://www.lfd.uci.edu/>`_. For example:
+converting to TIFF, and viewing many of the proprietary file formats used
+to store experimental data and metadata at the
+`Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
+For example:
 
 * SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
 * GLOBALS LIF, ASCII
@@ -24,27 +25,34 @@ For command line usage run ``python -m lfdfiles --help``
 
 :License: BSD 3-Clause
 
-:Version: 2021.7.15
+:Version: 2022.2.2
 
 Requirements
 ------------
 This release has been tested with the following requirements and dependencies
 (other versions may work):
 
-* `CPython 3.7.9, 3.8.10, 3.9.6 64-bit <https://www.python.org>`_
-* `Cython 0.29.24 <https://cython.org>`_ (build)
-* `Numpy 1.20.3 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2021.7.2 <https://pypi.org/project/tifffile/>`_  (optional)
+* `CPython 3.8.10, 3.9.9, 3.10.1, 64-bit <https://www.python.org>`_
+* `Cython 0.29.27 <https://cython.org>`_ (build)
+* `Numpy 1.21.5 <https://pypi.org/project/numpy/>`_
+* `Tifffile 2021.11.2  <https://pypi.org/project/tifffile/>`_  (optional)
 * `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
 * `Oiffile 2021.6.6 <https://pypi.org/project/oiffile />`_ (optional)
 * `Netpbmfile 2021.6.6 <https://pypi.org/project/netpbmfile />`_ (optional)
-* `Matplotlib 3.4.2 <https://pypi.org/project/matplotlib/>`_
+* `Matplotlib 3.4.3 <https://pypi.org/project/matplotlib/>`_
   (optional for plotting)
 * `Click 8.0 <https://pypi.python.org/pypi/click>`_
   (optional for command line usage)
 
 Revisions
 ---------
+2022.2.2
+    Add type hints.
+    SimfcsFit.asarray returns dc_ref only; use p_fit for fit params (breaking).
+    Remove additional positional arguments to LfdFile init (breaking).
+    Guess SimfcsBin shape and dtype if not provided (breaking).
+    Use TiffWriter.write instead of deprecated save.
+    Drop support for Python 3.7 and numpy < 1.19 (NEP29).
 2021.7.15
     Refactor SimfcsFbd initialization.
     Print tracebacks of failing plugins in LfdFile.
