@@ -8,38 +8,65 @@ import re
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 
+buildnumber = ''
+
+
+def search(pattern, code, flags=0):
+    # return first match for pattern in code
+    match = re.search(pattern, code, flags)
+    if match is None:
+        raise ValueError(f'{pattern!r} not found')
+    return match.groups()[0]
+
 
 with open('lfdfiles/lfdfiles.py') as fh:
     code = fh.read()
 
-version = re.search(r"__version__ = '(.*?)'", code).groups()[0]
+version = search(r"__version__ = '(.*?)'", code)
+version += ('.' + buildnumber) if buildnumber else ''
 
-description = re.search(r'"""(.*)\.(?:\r\n|\r|\n)', code).groups()[0]
+description = search(r'"""(.*)\.(?:\r\n|\r|\n)', code)
 
-readme = re.search(
+readme = search(
     r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}[__version__|from]',
     code,
     re.MULTILINE | re.DOTALL,
-).groups()[0]
-
+)
 readme = '\n'.join(
     [description, '=' * len(description)] + readme.splitlines()[1:]
 )
 
-license = re.search(
-    r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""',
-    code,
-    re.MULTILINE | re.DOTALL,
-).groups()[0]
-
-license = license.replace('# ', '').replace('#', '')
-
 if 'sdist' in sys.argv:
+    # update README, LICENSE, and CHANGES files
+
+    with open('README.rst', 'w') as fh:
+        fh.write(readme)
+
+    license = search(
+        r'(# Copyright.*?(?:\r\n|\r|\n))(?:\r\n|\r|\n)+""',
+        code,
+        re.MULTILINE | re.DOTALL,
+    )
+    license = license.replace('# ', '').replace('#', '')
+
     with open('LICENSE', 'w') as fh:
         fh.write('BSD 3-Clause License\n\n')
         fh.write(license)
-    with open('README.rst', 'w') as fh:
-        fh.write(readme)
+
+    revisions = search(
+        r'(?:\r\n|\r|\n){2}(Revisions.*)\* \.\.\.',
+        readme,
+        re.MULTILINE | re.DOTALL,
+    ).strip()
+
+    with open('CHANGES.rst', 'r') as fh:
+        old = fh.read()
+
+    d = revisions.splitlines()[-1]
+    old = old.split(d)[-1]
+    with open('CHANGES.rst', 'w') as fh:
+        fh.write(revisions.strip())
+        fh.write(old)
 
 
 class build_ext(_build_ext):
@@ -71,14 +98,6 @@ ext_modules = [
         ],
         extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
     ),
-    Extension(
-        'lfdfiles._sflim',
-        ['lfdfiles/_sflim' + ext],
-        extra_compile_args=[
-            '/openmp' if sys.platform == 'win32' else '-fopenmp'
-        ],
-        extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
-    ),
 ]
 
 setup(
@@ -88,6 +107,7 @@ setup(
     long_description=readme,
     author='Christoph Gohlke',
     author_email='cgohlke@uci.edu',
+    license='BSD',
     url='https://www.lfd.uci.edu/~gohlke/',
     project_urls={
         'Bug Tracker': 'https://github.com/cgohlke/lfdfiles/issues',
@@ -99,8 +119,8 @@ setup(
     setup_requires=['setuptools>=18.0', 'numpy>=1.19.2'],
     extras_require={
         'all': [
-            'imagecodecs>=2021.11.20',
-            'matplotlib>=3.3',
+            'imagecodecs>=2022.2.22',
+            'matplotlib>=3.4',
             'czifile>=2019.7.2',
             'oiffile>=2021.6.6',
             'netpbmfile>=2021.6.6',
@@ -108,10 +128,14 @@ setup(
     },
     tests_require=['pytest'],
     packages=['lfdfiles'],
-    entry_points={'console_scripts': ['lfdfiles=lfdfiles.__main__:main']},
+    entry_points={
+        'console_scripts': [
+            'lfdfiles = lfdfiles.__main__:main',
+            'fbd2b64 = lfdfiles.fbd2b64:main',
+        ]
+    },
     ext_modules=ext_modules,
     cmdclass={'build_ext': build_ext},
-    license='BSD',
     zip_safe=False,
     platforms=['any'],
     classifiers=[
@@ -125,5 +149,6 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
     ],
 )
