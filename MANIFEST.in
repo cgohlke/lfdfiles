@@ -1,15 +1,16 @@
 include LICENSE
 include README.rst
-include pyproject.toml
+include CHANGES.rst
 
 include lfdfiles/_lfdfiles.c
 include lfdfiles/_lfdfiles.pyx
-include lfdfiles/_sflim.c
-include lfdfiles/_sflim.pyx
 
 exclude tests/*.*
 
 include tests/test_lfdfiles.py
+include docs/conf.py
+include docs/index.rst
+include docs/_static/custom.css
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
