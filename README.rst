@@ -7,86 +7,82 @@ to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
 For example:
 
-* SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
-* GLOBALS LIF, ASCII
-* CCP4 MAP
-* Vaa3D RAW
-* Bio-Rad(r) PIC
-* Vista IFLI, IFI
-* FlimFast FLIF
+- SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
+- GLOBALS LIF, ASCII
+- CCP4 MAP
+- Vaa3D RAW
+- Bio-Rad(r) PIC
+- Vista IFLI, IFI
+- FlimFast FLIF
 
-:Author:
-  `Christoph Gohlke <https://www.lfd.uci.edu/~gohlke/>`_
-
-:Organization:
-  Laboratory for Fluorescence Dynamics. University of California, Irvine
-
+:Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-
-:Version: 2022.6.10
-
-Requirements
-------------
-This release has been tested with the following requirements and dependencies
-(other versions may work):
-
-* `CPython 3.8.10, 3.9.13, 3.10.5, 3.11.0b3 <https://www.python.org>`_
-  (win-amd64 platforms, 32-bit platforms are deprecated)
-* `Cython 0.29.30 <https://pypi.org/project/cython/>`_ (build)
-* `NumPy 1.21.5 <https://pypi.org/project/numpy/>`_
-* `Tifffile 2022.5.4  <https://pypi.org/project/tifffile/>`_  (optional)
-* `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-* `Oiffile 2022.2.2 <https://pypi.org/project/oiffile />`_ (optional)
-* `Netpbmfile 2022.2.2 <https://pypi.org/project/netpbmfile />`_ (optional)
-* `Matplotlib 3.5.1 <https://pypi.org/project/matplotlib/>`_
-  (optional, for plotting)
-* `Click 8.1 <https://pypi.python.org/pypi/click>`_
-  (optional, for command line usage)
+:Version: 2022.9.20
 
 Installation
 ------------
 
 Install the lfdfiles package and common dependencies from the
-Python Package Index:
+Python Package Index::
 
-    ``python -m pip install -U lfdfiles matplotlib``
+    python -m pip install -U lfdfiles tifffile matplotlib
 
 Binary wheels are currently available for Windows only. On other platforms,
 a Python distutils compatible C compiler is required to install the package
 from source.
 
+This release has been tested with the following requirements and dependencies
+(other versions may work):
+
+- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
+  (win-amd64 platforms, 32-bit platforms are deprecated)
+- `Cython 0.29.32 <https://pypi.org/project/cython/>`_ (build)
+- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
+- `Tifffile 2022.8.12  <https://pypi.org/project/tifffile/>`_  (optional)
+- `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
+- `Oiffile 2022.2.2 <https://pypi.org/project/oiffile />`_ (optional)
+- `Netpbmfile 2022.9.12 <https://pypi.org/project/netpbmfile />`_ (optional)
+- `Matplotlib 3.5.3 <https://pypi.org/project/matplotlib/>`_
+  (optional, for plotting)
+- `Click 8.1 <https://pypi.python.org/pypi/click>`_
+  (optional, for command line usage)
+
 Revisions
 ---------
 
+2022.9.20
+
+- Update metadata.
+
 2022.6.10
 
-* Fix LfdFileSequence with tifffile 2022.4.22.
-* Add fbd2b64 conversion function and script.
-* Add decoder for 32-bit, 8 windows, 4 channels FLIMbox data from Spartan-6.
-* Convert docstrings to Google style with Sphinx directives.
+- Fix LfdFileSequence with tifffile 2022.4.22.
+- Add fbd2b64 conversion function and script.
+- Add decoder for 32-bit, 8 windows, 4 channels FLIMbox data from Spartan-6.
+- Convert docstrings to Google style with Sphinx directives.
 
 2022.2.2
 
-* Add type hints.
-* SimfcsFit.asarray returns dc_ref only; use p_fit for fit params (breaking).
-* Remove additional positional arguments to LfdFile init (breaking).
-* Guess SimfcsBin shape and dtype if not provided (breaking).
-* Use TiffWriter.write instead of deprecated save.
-* Drop support for Python 3.7 and NumPy < 1.19 (NEP29).
+- Add type hints.
+- SimfcsFit.asarray returns dc_ref only; use p_fit for fit params (breaking).
+- Remove additional positional arguments to LfdFile init (breaking).
+- Guess SimfcsBin shape and dtype if not provided (breaking).
+- Use TiffWriter.write instead of deprecated save.
+- Drop support for Python 3.7 and NumPy < 1.19 (NEP29).
 
 2021.7.15
 
-* Refactor SimfcsFbd initialization.
-* Print tracebacks of failing plugins in LfdFile.
+- Refactor SimfcsFbd initialization.
+- Print tracebacks of failing plugins in LfdFile.
 
 2021.7.11
 
-* Calculate pixel_dwell_time and frame_size for FBD files with header.
-* Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
+- Calculate pixel_dwell_time and frame_size for FBD files with header.
+- Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
 
 2021.6.25
 
-* ...
+- ...
 
 Refer to the CHANGES file for older revisions.
 
@@ -112,28 +108,6 @@ Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
 
 For command line usage run ``python -m lfdfiles --help``.
-
-Examples
---------
-
-Create a Bio-Rad PIC file from a NumPy array:
-
->>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
->>> bioradpic_write('_biorad.pic', data)
-
-Read the volume data from the PIC file as NumPy array, and access metadata:
-
->>> with BioradPic('_biorad.pic') as f:
-...     f.shape
-...     f.spacing
-...     data = f.asarray()
-(100, 100, 100)
-(1.0, 1.0, 1.0)
-
-Convert the PIC file to a compressed TIFF file:
-
->>> with BioradPic('_biorad.pic') as f:
-...     f.totiff('_biorad.tif', compression='zlib')
 
 References
 ----------
@@ -173,3 +147,25 @@ The following software is referenced in this module:
     University.
 12. `CCP4 <https://www.ccp4.ac.uk/>`_, the Collaborative Computational Project
     No. 4, is software for macromolecular X-Ray crystallography.
+
+Examples
+--------
+
+Create a Bio-Rad PIC file from a NumPy array:
+
+>>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+>>> bioradpic_write('_biorad.pic', data)
+
+Read the volume data from the PIC file as NumPy array, and access metadata:
+
+>>> with BioradPic('_biorad.pic') as f:
+...     f.shape
+...     f.spacing
+...     data = f.asarray()
+(100, 100, 100)
+(1.0, 1.0, 1.0)
+
+Convert the PIC file to a compressed TIFF file:
+
+>>> with BioradPic('_biorad.pic') as f:
+...     f.totiff('_biorad.tif', compression='zlib')
