@@ -1,124 +1,128 @@
 Revisions
 ---------
 
+2022.9.20
+
+- Update metadata.
+
 2022.6.10
 
-* Fix LfdFileSequence with tifffile 2022.4.22.
-* Add fbd2b64 conversion function and script.
-* Add decoder for 32-bit, 8 windows, 4 channels FLIMbox data from Spartan-6.
-* Convert docstrings to Google style with Sphinx directives.
+- Fix LfdFileSequence with tifffile 2022.4.22.
+- Add fbd2b64 conversion function and script.
+- Add decoder for 32-bit, 8 windows, 4 channels FLIMbox data from Spartan-6.
+- Convert docstrings to Google style with Sphinx directives.
 
 2022.2.2
 
-* Add type hints.
-* SimfcsFit.asarray returns dc_ref only; use p_fit for fit params (breaking).
-* Remove additional positional arguments to LfdFile init (breaking).
-* Guess SimfcsBin shape and dtype if not provided (breaking).
-* Use TiffWriter.write instead of deprecated save.
-* Drop support for Python 3.7 and NumPy < 1.19 (NEP29).
+- Add type hints.
+- SimfcsFit.asarray returns dc_ref only; use p_fit for fit params (breaking).
+- Remove additional positional arguments to LfdFile init (breaking).
+- Guess SimfcsBin shape and dtype if not provided (breaking).
+- Use TiffWriter.write instead of deprecated save.
+- Drop support for Python 3.7 and NumPy < 1.19 (NEP29).
 
 2021.7.15
 
-* Refactor SimfcsFbd initialization.
-* Print tracebacks of failing plugins in LfdFile.
+- Refactor SimfcsFbd initialization.
+- Print tracebacks of failing plugins in LfdFile.
 
 2021.7.11
 
-* Calculate pixel_dwell_time and frame_size for FBD files with header.
-* Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
+- Calculate pixel_dwell_time and frame_size for FBD files with header.
+- Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
 
 2021.6.25
 
-* Read ISS Vista IFI files.
-* Fix reading FBD files with FBF header.
-* Fix reading R64 files with excess bytes.
-* Fix reading VPL files used by ISS Vista.
-* Remove lazyattr.
+- Read ISS Vista IFI files.
+- Fix reading FBD files with FBF header.
+- Fix reading R64 files with excess bytes.
+- Fix reading VPL files used by ISS Vista.
+- Remove lazyattr.
 
 2021.6.6
 
-* Fix unclosed file warnings.
-* Replace TIFF compress with compression parameter (breaking).
-* Remove compress option from command line interface (breaking).
+- Fix unclosed file warnings.
+- Replace TIFF compress with compression parameter (breaking).
+- Remove compress option from command line interface (breaking).
 
 2021.2.22
 
-* Add function to decode Spectral FLIM data from Kintex FLIMbox.
-* Relax VistaIfli file version check.
+- Add function to decode Spectral FLIM data from Kintex FLIMbox.
+- Relax VistaIfli file version check.
 
 2020.9.18
 
-* Remove support for Python 3.6 (NEP 29).
-* Support os.PathLike file names.
-* Fix writing contiguous series to TIFF files with tifffile >= 2020.9.3.
+- Remove support for Python 3.6 (NEP 29).
+- Support os.PathLike file names.
+- Fix writing contiguous series to TIFF files with tifffile >= 2020.9.3.
 
 2020.1.1
 
-* Read CZI files via czifile module.
-* Read Olympus Image files via oiffile module.
-* Read Netpbm formats via netpbmfile module.
-* Add B64, Z64, and I64 write functions.
-* Remove support for Python 2.7 and 3.5.
+- Read CZI files via czifile module.
+- Read Olympus Image files via oiffile module.
+- Read Netpbm formats via netpbmfile module.
+- Add B64, Z64, and I64 write functions.
+- Remove support for Python 2.7 and 3.5.
 
 2019.7.2
 
-* Require tifffile 2019.7.2.
-* Remove some utility functions.
+- Require tifffile 2019.7.2.
+- Remove some utility functions.
 
 2019.5.22
 
-* Read and write Bio-Rad(tm) PIC files.
-* Read and write Voxx MAP palette files.
-* Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw (breaking).
-* Rename save functions.
+- Read and write Bio-Rad(tm) PIC files.
+- Read and write Voxx MAP palette files.
+- Rename SimfcsMap to Ccp4Map and SimfcsV3draw to Vaa3dRaw (breaking).
+- Rename save functions.
 
 2019.4.22
 
-* Fix setup requirements.
+- Fix setup requirements.
 
 2019.1.24
 
-* Add plots for GlobalsLif, SimfcsV3draw, and VistaIfli.
-* Support Python 3.7 and numpy 1.15.
-* Move modules into lfdfiles package.
+- Add plots for GlobalsLif, SimfcsV3draw, and VistaIfli.
+- Support Python 3.7 and numpy 1.15.
+- Move modules into lfdfiles package.
 
 2018.5.21
 
-* Update SimfcsB64 to handle carpets and streams.
-* Command line interface for plotting and converting to TIFF.
-* Registry of LfdFile classes.
-* Write image and metadata to TIFF.
-* Read TIFF files via tifffile module.
+- Update SimfcsB64 to handle carpets and streams.
+- Command line interface for plotting and converting to TIFF.
+- Registry of LfdFile classes.
+- Write image and metadata to TIFF.
+- Read TIFF files via tifffile module.
 
 2016.3.29
 
-* Add R64 write function.
+- Add R64 write function.
 
 2016.3.14
 
-* Read and write Vaa3D RAW volume files.
+- Read and write Vaa3D RAW volume files.
 
 2015.3.02
 
-* Initial support for plotting.
+- Initial support for plotting.
 
 2015.2.19
 
-* Initial support for new FBD files containing headers.
+- Initial support for new FBD files containing headers.
 
 2014.12.2
 
-* Read B64, R64, I64 and Z64 files (SimFCS version 4).
+- Read B64, R64, I64 and Z64 files (SimFCS version 4).
 
 2014.10.10
 
-* Read SimFCS FIT files.
+- Read SimFCS FIT files.
 
 2014.4.8
 
-* Read and write CCP4 MAP volume files.
+- Read and write CCP4 MAP volume files.
 
 2013.8.10
 
-* Read second harmonics FLIMbox data.
-* ...
+- Read second harmonics FLIMbox data.
+- ...
