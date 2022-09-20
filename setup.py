@@ -54,7 +54,7 @@ if 'sdist' in sys.argv:
         fh.write(license)
 
     revisions = search(
-        r'(?:\r\n|\r|\n){2}(Revisions.*)\* \.\.\.',
+        r'(?:\r\n|\r|\n){2}(Revisions.*)- \.\.\.',
         readme,
         re.MULTILINE | re.DOTALL,
     ).strip()
@@ -103,12 +103,12 @@ ext_modules = [
 setup(
     name='lfdfiles',
     version=version,
+    license='BSD',
     description=description,
     long_description=readme,
     author='Christoph Gohlke',
-    author_email='cgohlke@uci.edu',
-    license='BSD',
-    url='https://www.lfd.uci.edu/~gohlke/',
+    author_email='cgohlke@cgohlke.com',
+    url='https://www.cgohlke.com',
     project_urls={
         'Bug Tracker': 'https://github.com/cgohlke/lfdfiles/issues',
         'Source Code': 'https://github.com/cgohlke/lfdfiles',
