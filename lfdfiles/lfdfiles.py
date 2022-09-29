@@ -47,7 +47,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.20
+:Version: 2022.9.29
 
 Installation
 ------------
@@ -79,6 +79,10 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2022.9.29
+
+- Fix setup.py.
 
 2022.9.20
 
@@ -204,7 +208,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2022.9.20'
+__version__ = '2022.9.29'
 
 __all__ = [
     'LfdFile',
@@ -296,7 +300,6 @@ if TYPE_CHECKING:
         Literal,
         Callable,
         Sequence,
-        Type,
         Iterator,
     )
 
@@ -353,7 +356,7 @@ class LfdFileError(Exception):
 class LfdFileRegistry(type):
     """Metaclass to register classes derived from LfdFile."""
 
-    classes: list[Type[LfdFile]] = []
+    classes: list[type[LfdFile]] = []
     """Registered LfdFile classes."""
 
     def __new__(cls, name, bases, dct):
@@ -2954,7 +2957,7 @@ class SimfcsFbd(LfdFile):
 
     @staticmethod
     def _b4w16c2():
-        # return parameters to decode 32-bit, 16 windows, 2 channels (Spartan-6)
+        # return parameters to decode 32-bit, 16 windows, 2 channels (Spartan6)
         # TODO
         raise NotImplementedError
 
@@ -6008,7 +6011,7 @@ def convert_fbd2b64(
 def convert2tiff(
     files,
     verbose: bool = True,
-    skip: Sequence[Type[LfdFile]] | None = None,
+    skip: Sequence[type[LfdFile]] | None = None,
     **kwargs,
 ) -> None:
     """Convert image data from LfdFile(s) to TIFF files.
