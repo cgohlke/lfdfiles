@@ -38,15 +38,11 @@
 """Fast implementations for the lfdfiles module.
 
 :Author: Christoph Gohlke
-
-:Organization:
-  Laboratory for Fluorescence Dynamics. University of California, Irvine
-
 :License: BSD 3-Clause
 
 """
 
-__version__ = '2022.6.10'
+__version__ = '2022.9.29'
 
 
 from cython.parallel import parallel, prange
