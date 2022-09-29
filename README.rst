@@ -17,7 +17,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.20
+:Version: 2022.9.29
 
 Installation
 ------------
@@ -49,6 +49,10 @@ This release has been tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2022.9.29
+
+- Fix setup.py.
 
 2022.9.20
 
