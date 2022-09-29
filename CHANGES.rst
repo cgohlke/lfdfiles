@@ -1,6 +1,10 @@
 Revisions
 ---------
 
+2022.9.29
+
+- Fix setup.py.
+
 2022.9.20
 
 - Update metadata.
