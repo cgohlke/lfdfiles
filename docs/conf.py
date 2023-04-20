@@ -6,10 +6,10 @@ import sys
 here = os.path.dirname(__file__)
 sys.path.insert(0, os.path.split(here)[0])
 
-import lfdfiles
+import lfdfiles  # noqa
 
 project = 'lfdfiles'
-copyright = '2012-2022, Christoph Gohlke'
+copyright = '2012-2023, Christoph Gohlke'
 author = 'Christoph Gohlke'
 version = lfdfiles.__version__
 
@@ -27,8 +27,6 @@ extensions = [
 
 templates_path = ['_templates']
 
-exclude_patterns = []
-
 html_theme = 'alabaster'
 
 html_static_path = ['_static']
@@ -45,3 +43,12 @@ autosummary_generate = True
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+
+
+def add_section(app, what, name, obj, options, lines):
+    if what == 'module':
+        lines.extend(('API', '---'))
+
+
+def setup(app):
+    app.connect('autodoc-process-docstring', add_section)
