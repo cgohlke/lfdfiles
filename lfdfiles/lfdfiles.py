@@ -1,6 +1,6 @@
 # lfdfiles.py
 
-# Copyright (c) 2012-2022, Christoph Gohlke
+# Copyright (c) 2012-2023, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,48 +37,61 @@ to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
 For example:
 
-- SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
+- SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ B64, I64, Z64, R64
+- FLIMbox FBD, FBF
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
 - Bio-Rad(r) PIC
-- Vista IFLI, IFI
+- ISS Vista IFLI, IFI
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.29
+:Version: 2023.4.20
 
-Installation
+Quickstart
+----------
+
+Install the lfdfiles package and all dependencies from the
+`Python Package Index <https://pypi.org/project/lfdfiles/>`_::
+
+    python -m pip install -U lfdfiles[all]
+
+Print the console script usage::
+
+    python -m lfdfiles --help
+
+See `Examples`_ for using the programming interface.
+
+Source code and support are available on
+`GitHub <https://github.com/cgohlke/lfdfiles>`_.
+
+Requirements
 ------------
 
-Install the lfdfiles package and common dependencies from the
-Python Package Index::
-
-    python -m pip install -U lfdfiles tifffile matplotlib
-
-Binary wheels are currently available for Windows only. On other platforms,
-a Python distutils compatible C compiler is required to install the package
-from source.
-
-This release has been tested with the following requirements and dependencies
+This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
-  (win-amd64 platforms, 32-bit platforms are deprecated)
-- `Cython 0.29.32 <https://pypi.org/project/cython/>`_ (build)
-- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
-- `Tifffile 2022.8.12  <https://pypi.org/project/tifffile/>`_  (optional)
-- `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-- `Oiffile 2022.2.2 <https://pypi.org/project/oiffile />`_ (optional)
-- `Netpbmfile 2022.9.12 <https://pypi.org/project/netpbmfile />`_ (optional)
-- `Matplotlib 3.5.3 <https://pypi.org/project/matplotlib/>`_
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.3
+- `Cython <https://pypi.org/project/cython/>`_ 0.29.34 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.23.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.4.12(optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
+- `Oiffile <https://pypi.org/project/oiffile />`_ 2022.9.29 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.1.1 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.1
   (optional, for plotting)
-- `Click 8.1 <https://pypi.python.org/pypi/click>`_
-  (optional, for command line usage)
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.3
+  (optional, for command line apps)
 
 Revisions
 ---------
+
+2023.4.20
+
+- Improve type hints.
+- Drop support for Python 3.8 and numpy < 1.21 (NEP29).
 
 2022.9.29
 
@@ -123,9 +136,9 @@ Refer to the CHANGES file for older revisions.
 Notes
 -----
 
-Lfdfiles is currently developed, built, and tested on Windows only.
-
 The API is not stable yet and might change between revisions.
+
+Python <= 3.8 is no longer supported. 32-bit versions are deprecated.
 
 The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
 <https://support.microsoft.com/en-us/help/2977003/
@@ -141,8 +154,6 @@ available in separate, human readable journal files (`.jrn`).
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
 
-For command line usage run ``python -m lfdfiles --help``.
-
 References
 ----------
 
@@ -156,7 +167,7 @@ The following software is referenced in this module:
     fluorescence spectroscopy, developed by Enrico Gratton at UIUC and UCI.
 3.  ImObj is software for image analysis, developed by LFD at UIUC.
     Implemented on Win16.
-4.  `FlimFast <https://www.lfd.uci.edu/~gohlke/flimfast/>`_ is software for
+4.  `FlimFast <https://www.cgohlke.com/flimfast/>`_ is software for
     frequency-domain, full-field, fluorescence lifetime imaging at video
     rate, developed by Christoph Gohlke at UIUC.
 5.  FLImage is software for frequency-domain, full-field, fluorescence
@@ -208,7 +219,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2022.9.29'
+__version__ = '2023.4.20'
 
 __all__ = [
     'LfdFile',
@@ -294,20 +305,11 @@ from tifffile import (
 from typing import TYPE_CHECKING, BinaryIO
 
 if TYPE_CHECKING:
-    from typing import (
-        Any,
-        ClassVar,
-        Literal,
-        Callable,
-        Sequence,
-        Iterator,
-    )
+    from typing import Any, ClassVar, Literal, Callable
+    from collections.abc import Sequence, Iterator
 
-    try:
-        from numpy.typing import ArrayLike
-    except ImportError:
-        # numpy < 1.20
-        from numpy import ndarray as ArrayLike
+    from numpy.typing import ArrayLike
+
 
 # delay import optional modules
 pyplot = None
@@ -339,7 +341,7 @@ class LfdFileError(Exception):
 
     Parameters:
         arg:
-            Error message or LfdFile instance where error occured.
+            Error message or LfdFile instance where error occurred.
         msg:
             Additional error message.
 
@@ -362,11 +364,11 @@ class LfdFileRegistry(type):
     def __new__(cls, name, bases, dct):
         klass = type.__new__(cls, name, bases, dct)
         if klass.__name__[:7] != 'LfdFile':
-            LfdFileRegistry.classes.append(klass)
+            LfdFileRegistry.classes.append(klass)  # type: ignore
         return klass
 
     @staticmethod
-    def sort():
+    def sort() -> None:
         """Move SimfcsBin class to end of list.
 
         :meta private:
@@ -441,7 +443,7 @@ class LfdFile(metaclass=LfdFileRegistry):
     shape: tuple[int, ...] | None
     """Shape of data array contained in file."""
 
-    dtype: numpy.dtype | None
+    dtype: numpy.dtype[Any] | None
     """Type of array data contained in file."""
 
     axes: str | None
@@ -456,7 +458,9 @@ class LfdFile(metaclass=LfdFileRegistry):
     _fsize: int | None
     _filename: str
 
-    def __new__(cls, filename: os.PathLike | str, **kwargs) -> LfdFile:
+    def __new__(
+        cls, filename: os.PathLike[Any] | str, **kwargs: Any
+    ) -> LfdFile:
         """Return LfdFile derived class that can open filename."""
         if cls is not LfdFile:
             return object.__new__(cls)
@@ -499,11 +503,14 @@ class LfdFile(metaclass=LfdFileRegistry):
         )
 
     def __init__(
-        self, filename: os.PathLike | str, _offset: int = 0, **kwargs
+        self,
+        filename: os.PathLike[Any] | str,
+        _offset: int = 0,
+        **kwargs: Any,
     ) -> None:
         kwargs2 = parse_kwargs(kwargs, validate=True, components=True)
-        components = kwargs2['components']
-        validate = kwargs2['validate']
+        components = bool(kwargs2['components'])
+        validate = bool(kwargs2['validate'])
         self.shape = None
         self.dtype = None
         self.axes = None
@@ -524,7 +531,7 @@ class LfdFile(metaclass=LfdFileRegistry):
             else:
                 raise LfdFileError(self, 'not a component file')
             # try to open file using all registered classes
-            components = []
+            component_list: list[tuple[str, LfdFile]] = []
             for label, fname in components_:
                 fname = os.path.join(self._filepath, fname)
                 try:
@@ -536,16 +543,16 @@ class LfdFile(metaclass=LfdFileRegistry):
                     )
                 except Exception:  # LfdFileError, FileNotFoundError
                     continue
-                components.append((label, lfdfile))
-            if not components:
+                component_list.append((label, lfdfile))
+            if not component_list:
                 raise LfdFileError(self, 'no component files found')
-            self.components = components
+            self.components = component_list
             if lfdfile.shape is None:
                 raise LfdFileError(self, 'no shape')
-            self.shape = (len(components), *lfdfile.shape)
+            self.shape = (len(component_list), *lfdfile.shape)
             self.dtype = lfdfile.dtype
-            if components[0][1].axes is not None:
-                self.axes = 'S' + components[0][1].axes
+            if component_list[0][1].axes is not None:
+                self.axes = 'S' + component_list[0][1].axes
         else:
             self.components = []
             self._fh = open(filename, self._filemode)
@@ -594,10 +601,10 @@ class LfdFile(metaclass=LfdFileRegistry):
             s.append(_str)
         return indent(*s)
 
-    def __enter__(self):
+    def __enter__(self: LfdFileType) -> LfdFileType:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore
         self.close()
 
     def close(self) -> None:
@@ -631,7 +638,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         return self._asarray(*args, **kwargs)
 
     def totiff(
-        self, filename: os.PathLike | str | None = None, **kwargs
+        self, filename: os.PathLike[Any] | str | None = None, **kwargs
     ) -> None:
         """Write image(s) and metadata to TIFF file.
 
@@ -801,12 +808,12 @@ class LfdFile(metaclass=LfdFileRegistry):
         decompressor = zlib.decompressobj()
         return decompressor.decompress(data, max_length)
 
-    def _fstat(self):
+    def _fstat(self) -> os.stat_result:
         """Return status of open file."""
         return os.fstat(self._fh.fileno())
 
     @property
-    def _filesize(self):
+    def _filesize(self) -> int:
         """File size in bytes."""
         if self._fsize is None:
             pos = self._fh.tell()
@@ -816,23 +823,29 @@ class LfdFile(metaclass=LfdFileRegistry):
         return self._fsize
 
     @property
-    def filename(self):
+    def filename(self) -> str:
         """Name of file."""
         return os.path.join(self._filepath, self._filename)
 
     @property
-    def size(self):
+    def size(self) -> int | None:
         """Number of elements in data array."""
         if self.shape is None:
             return None
         return product(self.shape)
 
     @property
-    def ndim(self):
+    def ndim(self) -> int | None:
         """Number of dimensions in data array."""
         if self.shape is None:
             return None
         return len(self.shape)
+
+
+if TYPE_CHECKING:
+    from typing import TypeVar
+
+    LfdFileType = TypeVar('LfdFileType', bound=LfdFile)
 
 
 class LfdFileSequence(FileSequence):
@@ -1419,7 +1432,7 @@ class SimfcsBin(LfdFile):
     def _init(
         self,
         shape: tuple[int, ...] | None = None,
-        dtype: numpy.dtype | str | None = None,
+        dtype: numpy.dtype[Any] | str | None = None,
         offset: int = 0,
         validate_size: bool = True,
         **kwargs,
@@ -1948,7 +1961,7 @@ class SimfcsBhz(SimfcsBh):
     _filepattern = r'.*\.(bhz)$'
 
     shape: tuple[int, ...]
-    dtype: numpy.dtype
+    dtype: numpy.dtype[Any]
     _fh: BinaryIO
 
     def _init(self, **kwargs) -> None:
@@ -2009,7 +2022,10 @@ class SimfcsB64(LfdFile):
     _filepattern = r'.*\.b64$'
 
     def _init(
-        self, dtype: numpy.dtype | str = '<i2', maxsize: int = 4096, **kwargs
+        self,
+        dtype: numpy.dtype[Any] | str = '<i2',
+        maxsize: int = 4096,
+        **kwargs,
     ) -> None:
         """Read file header."""
         assert self._fh is not None
@@ -2053,7 +2069,7 @@ class SimfcsB64(LfdFile):
         tif.write(self.asarray(), **kwargs)
 
 
-def simfcsb64_write(filename: os.PathLike | str, data: ArrayLike) -> None:
+def simfcsb64_write(filename: os.PathLike[Any] | str, data: ArrayLike) -> None:
     """Write array of square int16 images to B64 file.
 
     Refer to :py:class:`SimfcsB64` for the B64 file format.
@@ -2115,7 +2131,10 @@ class SimfcsI64(LfdFile):
     _filepattern = r'.*\.i64$'
 
     def _init(
-        self, dtype: numpy.dtype | str = '<f4', maxsize: int = 1024, **kwargs
+        self,
+        dtype: numpy.dtype[Any] | str = '<f4',
+        maxsize: int = 1024,
+        **kwargs,
     ) -> None:
         """Read file header."""
         if not 32 <= self._filesize <= 67108864:  # limit to 64 MB
@@ -2150,7 +2169,7 @@ class SimfcsI64(LfdFile):
         tif.write(self.asarray(), **kwargs)
 
 
-def simfcsi64_write(filename: os.PathLike | str, data: ArrayLike) -> None:
+def simfcsi64_write(filename: os.PathLike[Any] | str, data: ArrayLike) -> None:
     """Write a single float32 image to I64 file.
 
     Refer to :py:class:`SimfcsI64` for the I64 file format.
@@ -2225,7 +2244,7 @@ class SimfcsZ64(LfdFile):
 
     def _init(
         self,
-        dtype: numpy.dtype | str = '<f4',
+        dtype: numpy.dtype[Any] | str = '<f4',
         maxsize: tuple[int, int] = (256, 1024),
         doubleheader: bool = False,
         **kwargs,
@@ -2279,7 +2298,7 @@ class SimfcsZ64(LfdFile):
         tif.write(data, **kwargs)
 
 
-def simfcsz64_write(filename: os.PathLike | str, data: ArrayLike) -> None:
+def simfcsz64_write(filename: os.PathLike[Any] | str, data: ArrayLike) -> None:
     """Write stack of float32 images to Z64 file.
 
     Refer to :py:class:`SimfcsZ64` for the Z64 file format.
@@ -2346,7 +2365,10 @@ class SimfcsR64(SimfcsRef):
     _filepattern = r'.*\.r64$'
 
     def _init(
-        self, dtype: numpy.dtype | str = '<f4', maxsize: int = 1024, **kwargs
+        self,
+        dtype: numpy.dtype[Any] | str = '<f4',
+        maxsize: int = 1024,
+        **kwargs,
     ) -> None:
         """Read file header."""
         if self._filesize < 32:
@@ -2385,7 +2407,7 @@ class SimfcsR64(SimfcsRef):
             tif.write(image, description=label, **kwargs)
 
 
-def simfcsr64_write(filename: os.PathLike | str, data: ArrayLike) -> None:
+def simfcsr64_write(filename: os.PathLike[Any] | str, data: ArrayLike) -> None:
     """Write referenced data to R64 file.
 
     Refer to :py:class:`SimfcsR64` for the format of referenced data.
@@ -2465,7 +2487,7 @@ class SimfcsFbf(LfdFile):
         except ValueError:
             comment = []
         self._settings = {}
-        for (name, value, unit) in re.findall(
+        for name, value, unit in re.findall(
             r'([a-zA-Z\s]*)([.\d]*)([a-zA-Z\d]*)/', header
         ):
             name = name.strip().lower()
@@ -4892,7 +4914,7 @@ class BioradPic(LfdFile):
 
 
 def bioradpic_write(
-    filename: os.PathLike | str,
+    filename: os.PathLike[Any] | str,
     data: ArrayLike,
     axis: str = 'Z',
     spacing: Sequence[float] | None = None,
@@ -5208,7 +5230,7 @@ class Ccp4Map(LfdFile):
 
 
 def ccp4map_write(
-    filename: os.PathLike | str,
+    filename: os.PathLike[Any] | str,
     data: ArrayLike,
     start: Sequence[int] = (0, 0, 0),
     cell_interval: Sequence[int] | None = None,
@@ -5337,7 +5359,7 @@ class Vaa3dRaw(LfdFile):
     Vaa3D RAW files contain 4D CZYX multi-channel volume data.
 
     The data is stored C-contiguously as uint8, uint16 or float32 in little
-    or big-endian byte order, after a header defining data type, endianess,
+    or big-endian byte order, after a header defining data type, endianness,
     and shape.
 
     Parameters:
@@ -5404,7 +5426,7 @@ class Vaa3dRaw(LfdFile):
 
 
 def vaa3draw_write(
-    filename: os.PathLike | str,
+    filename: os.PathLike[Any] | str,
     data: ArrayLike,
     byteorder: Literal['>'] | Literal['<'] | None = None,
     twobytes: bool = False,
@@ -5527,7 +5549,7 @@ class VoxxMap(LfdFile):
         tif.write(data, **kwargs)
 
 
-def voxxmap_write(filename: os.PathLike | str, data: ArrayLike) -> None:
+def voxxmap_write(filename: os.PathLike[Any] | str, data: ArrayLike) -> None:
     """Write data to Voxx map file(s).
 
     Refer to :py:class:`VoxxMap` for the Voxx map format.
@@ -6064,7 +6086,7 @@ def convert2tiff(
 
 def determine_shape(
     shape: tuple[int, ...],
-    dtype: numpy.dtype | str,
+    dtype: numpy.dtype[Any] | str,
     size: int,
     validate: bool = True,
     exception=LfdFileError,
@@ -6184,7 +6206,7 @@ def main() -> None:
         try:
             import lfdfiles.lfdfiles as m
         except ImportError:
-            m = None
+            m = None  # type: ignore
         try:
             os.chdir('tests')
         except Exception:
