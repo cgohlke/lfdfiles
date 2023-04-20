@@ -6,7 +6,7 @@
 # cython: cdivision = True
 # cython: nonecheck = False
 
-# Copyright (c) 2012-2022, Christoph Gohlke
+# Copyright (c) 2012-2023, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 
 """
 
-__version__ = '2022.9.29'
+__version__ = '2023.4.20'
 
 
 from cython.parallel import parallel, prange
