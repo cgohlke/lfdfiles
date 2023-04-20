@@ -7,48 +7,61 @@ to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
 For example:
 
-- SimFCS VPL, VPP, JRN, BIN, INT, CYL REF, BH, BHZ FBF, FBD, B64, I64, Z64, R64
+- SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ B64, I64, Z64, R64
+- FLIMbox FBD, FBF
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
 - Bio-Rad(r) PIC
-- Vista IFLI, IFI
+- ISS Vista IFLI, IFI
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2022.9.29
+:Version: 2023.4.20
 
-Installation
+Quickstart
+----------
+
+Install the lfdfiles package and all dependencies from the
+`Python Package Index <https://pypi.org/project/lfdfiles/>`_::
+
+    python -m pip install -U lfdfiles[all]
+
+Print the console script usage::
+
+    python -m lfdfiles --help
+
+See `Examples`_ for using the programming interface.
+
+Source code and support are available on
+`GitHub <https://github.com/cgohlke/lfdfiles>`_.
+
+Requirements
 ------------
 
-Install the lfdfiles package and common dependencies from the
-Python Package Index::
-
-    python -m pip install -U lfdfiles tifffile matplotlib
-
-Binary wheels are currently available for Windows only. On other platforms,
-a Python distutils compatible C compiler is required to install the package
-from source.
-
-This release has been tested with the following requirements and dependencies
+This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython 3.8.10, 3.9.13, 3.10.7, 3.11.0rc2 <https://www.python.org>`_
-  (win-amd64 platforms, 32-bit platforms are deprecated)
-- `Cython 0.29.32 <https://pypi.org/project/cython/>`_ (build)
-- `NumPy 1.22.4 <https://pypi.org/project/numpy/>`_
-- `Tifffile 2022.8.12  <https://pypi.org/project/tifffile/>`_  (optional)
-- `Czifile 2019.7.2 <https://pypi.org/project/czifile/>`_ (optional)
-- `Oiffile 2022.2.2 <https://pypi.org/project/oiffile />`_ (optional)
-- `Netpbmfile 2022.9.12 <https://pypi.org/project/netpbmfile />`_ (optional)
-- `Matplotlib 3.5.3 <https://pypi.org/project/matplotlib/>`_
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.3
+- `Cython <https://pypi.org/project/cython/>`_ 0.29.34 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.23.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.4.12(optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
+- `Oiffile <https://pypi.org/project/oiffile />`_ 2022.9.29 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.1.1 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.1
   (optional, for plotting)
-- `Click 8.1 <https://pypi.python.org/pypi/click>`_
-  (optional, for command line usage)
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.3
+  (optional, for command line apps)
 
 Revisions
 ---------
+
+2023.4.20
+
+- Improve type hints.
+- Drop support for Python 3.8 and numpy < 1.21 (NEP29).
 
 2022.9.29
 
@@ -93,9 +106,9 @@ Refer to the CHANGES file for older revisions.
 Notes
 -----
 
-Lfdfiles is currently developed, built, and tested on Windows only.
-
 The API is not stable yet and might change between revisions.
+
+Python <= 3.8 is no longer supported. 32-bit versions are deprecated.
 
 The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
 <https://support.microsoft.com/en-us/help/2977003/
@@ -111,8 +124,6 @@ available in separate, human readable journal files (`.jrn`).
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
 
-For command line usage run ``python -m lfdfiles --help``.
-
 References
 ----------
 
@@ -126,7 +137,7 @@ The following software is referenced in this module:
     fluorescence spectroscopy, developed by Enrico Gratton at UIUC and UCI.
 3.  ImObj is software for image analysis, developed by LFD at UIUC.
     Implemented on Win16.
-4.  `FlimFast <https://www.lfd.uci.edu/~gohlke/flimfast/>`_ is software for
+4.  `FlimFast <https://www.cgohlke.com/flimfast/>`_ is software for
     frequency-domain, full-field, fluorescence lifetime imaging at video
     rate, developed by Christoph Gohlke at UIUC.
 5.  FLImage is software for frequency-domain, full-field, fluorescence
