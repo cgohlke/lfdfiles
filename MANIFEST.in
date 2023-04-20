@@ -5,12 +5,16 @@ include CHANGES.rst
 include lfdfiles/_lfdfiles.c
 include lfdfiles/_lfdfiles.pyx
 
-exclude tests/*.*
-
 include tests/test_lfdfiles.py
 include docs/conf.py
 include docs/index.rst
 include docs/_static/custom.css
+
+include .github/workflows/wheel.yml
+
+exclude *.cmd
+recursive-exclude doc *
+recursive-exclude test *
 
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
