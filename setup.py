@@ -28,7 +28,7 @@ version += ('.' + buildnumber) if buildnumber else ''
 description = search(r'"""(.*)\.(?:\r\n|\r|\n)', code)
 
 readme = search(
-    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}[__version__|from]',
+    r'(?:\r\n|\r|\n){2}"""(.*)"""(?:\r\n|\r|\n){2}from __future__',
     code,
     re.MULTILINE | re.DOTALL,
 )
@@ -92,14 +92,23 @@ try:
 except ImportError:
     ext = '.c'
 
+if sys.platform == 'win32':
+    extra_compile_args = ['/openmp']
+    extra_link_args = []
+elif sys.platform == 'darwin':
+    # https://mac.r-project.org/openmp/
+    extra_compile_args = ['-Xclang', '-fopenmp']
+    extra_link_args = ['-lomp']
+else:
+    extra_compile_args = ['-fopenmp']
+    extra_link_args = ['-fopenmp']
+
 ext_modules = [
     Extension(
         'lfdfiles._lfdfiles',
         ['lfdfiles/_lfdfiles' + ext],
-        extra_compile_args=[
-            '/openmp' if sys.platform == 'win32' else '-fopenmp'
-        ],
-        extra_link_args=[] if sys.platform == 'win32' else ['-fopenmp'],
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
     ),
 ]
 
@@ -117,16 +126,16 @@ setup(
         'Source Code': 'https://github.com/cgohlke/lfdfiles',
         # 'Documentation': 'https://',
     },
-    python_requires='>=3.8',
-    install_requires=['numpy>=1.19.2', 'tifffile>=2021.11.2', 'click'],
-    setup_requires=['setuptools>=18.0', 'numpy>=1.19.2'],
+    python_requires='>=3.9',
+    install_requires=['numpy', 'tifffile', 'click'],
+    setup_requires=['setuptools', 'numpy'],
     extras_require={
         'all': [
-            'imagecodecs>=2022.2.22',
-            'matplotlib>=3.4',
-            'czifile>=2019.7.2',
-            'oiffile>=2021.6.6',
-            'netpbmfile>=2021.6.6',
+            'imagecodecs',
+            'matplotlib',
+            'czifile',
+            'oiffile',
+            'netpbmfile',
         ]
     },
     tests_require=['pytest'],
@@ -149,7 +158,6 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
