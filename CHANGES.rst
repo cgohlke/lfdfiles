@@ -1,6 +1,11 @@
 Revisions
 ---------
 
+2023.4.20
+
+- Improve type hints.
+- Drop support for Python 3.8 and numpy < 1.21 (NEP29).
+
 2022.9.29
 
 - Fix setup.py.
