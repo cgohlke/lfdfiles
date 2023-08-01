@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.4.20
+:Version: 2023.8.1
 
 Quickstart
 ----------
@@ -62,6 +62,8 @@ Print the console script usage::
 
     python -m lfdfiles --help
 
+The lfdfiles library is type annotated and documented via docstrings.
+
 See `Examples`_ for using the programming interface.
 
 Source code and support are available on
@@ -73,20 +75,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.3
-- `Cython <https://pypi.org/project/cython/>`_ 0.29.34 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.23.5
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.4.12(optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.4, 3.12.0b4
+- `Cython <https://pypi.org/project/cython/>`_ 0.29.36 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.25.1
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.7.18 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile />`_ 2022.9.29 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.1.1 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.1
+- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.6.15 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.2
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.1.3
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.6
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2023.8.1
+
+- Specify encoding of text files.
+- Fix linting issues.
 
 2023.4.20
 
@@ -219,7 +226,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2023.4.20'
+__version__ = '2023.8.1'
 
 __all__ = [
     'LfdFile',
@@ -361,8 +368,8 @@ class LfdFileRegistry(type):
     classes: list[type[LfdFile]] = []
     """Registered LfdFile classes."""
 
-    def __new__(cls, name, bases, dct):
-        klass = type.__new__(cls, name, bases, dct)
+    def __new__(mcs, name, bases, dct):
+        klass = type.__new__(mcs, name, bases, dct)
         if klass.__name__[:7] != 'LfdFile':
             LfdFileRegistry.classes.append(klass)  # type: ignore
         return klass
@@ -414,6 +421,14 @@ class LfdFile(metaclass=LfdFileRegistry):
     :meta public:
 
     """
+
+    _fileencoding: str | None = None
+    """Text file encoding mode.
+
+    :meta public:
+
+    """
+
     _filepattern: ClassVar[str] = r'.*'
     """Regular expression pattern matching valid file names.
 
@@ -555,7 +570,9 @@ class LfdFile(metaclass=LfdFileRegistry):
                 self.axes = 'S' + component_list[0][1].axes
         else:
             self.components = []
-            self._fh = open(filename, self._filemode)
+            self._fh = open(
+                filename, self._filemode, encoding=self._fileencoding
+            )
             self._fh.seek(_offset)
             try:
                 if self._filesizemin != len(self._fh.read(self._filesizemin)):
@@ -564,10 +581,10 @@ class LfdFile(metaclass=LfdFileRegistry):
                 self._fh.close()
                 self._fh = None
                 raise
-            except Exception:
+            except Exception as exc:
                 self._fh.close()
                 self._fh = None
-                raise LfdFileError(self, 'not a text file')
+                raise LfdFileError(self, 'not a text file') from exc
 
             self._fh.seek(_offset)
             try:
@@ -954,7 +971,7 @@ class RawPal(LfdFile):
 
     def _init(self, **kwargs) -> None:
         """Verify file size is 768 or 1024."""
-        if self._filesize not in (768, 1024):
+        if self._filesize not in {768, 1024}:
             raise LfdFileError(self)
         self.shape = 256, -1
         self.dtype = numpy.dtype('u1')
@@ -1227,6 +1244,7 @@ class SimfcsJrn(LfdFile):
     """
 
     _filemode = 'r'
+    _fileencoding = 'cp1252'
     _filepattern = r'.*\.jrn$'
     _noplot = True
 
@@ -1348,7 +1366,11 @@ class SimfcsJrn(LfdFile):
 
     def _asarray(self, **kwargs) -> numpy.ndarray:
         """Raise ValueError."""
-        raise ValueError('file does not contain array data')
+        raise ValueError('SimfcsJrn file does not contain array data')
+
+    def _totiff(self, tif: TiffFile, **kwargs) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('SimfcsJrn file does not contain image data')
 
     @staticmethod
     def _parse_journal(
@@ -1889,7 +1911,7 @@ class SimfcsBh(LfdFile):
     SimFCS BHZ files are zipped B&H files: a Zip archive containing a single
     B&H file.
     BHZ files are occasionally used to store consecutive 256x256 float32
-    images, e.g., volume data.
+    images, for example, volume data.
 
     Parameters:
         filename: Name of file to open.
@@ -2519,6 +2541,10 @@ class SimfcsFbf(LfdFile):
         assert self._fh is not None
         return self._fh.read()
 
+    def _totiff(self, tif: TiffFile, **kwargs) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('SimfcsFbf file does not contain image data')
+
     def _str(self) -> str | None:
         """Return string with header settings."""
         return format_dict(self._settings)
@@ -2551,8 +2577,8 @@ class SimfcsFbd(LfdFile):
     followed by 31kB containing a binary record with measurement settings.
 
     It depends on the application and its setting how to interpret the
-    decoded data, e.g. as time series, line scans, or image frames of FCS
-    or digital frequency domain fluorescence lifetime measurements.
+    decoded data, for example, as time series, line scans, or image frames
+    of FCS or digital frequency domain fluorescence lifetime measurements.
 
     The data word format depends on the device's firmware.
     A common layout is::
@@ -2569,7 +2595,7 @@ class SimfcsFbd(LfdFile):
         bin = (pmax-1 - (pcc + win * (pmax//windows)) % pmax) // pdiv
 
     - ``bin``, cross correlation phase index (phase histogram bin number).
-    - ``pcc``, ross correlation phase (counter).
+    - ``pcc``, cross correlation phase (counter).
     - ``pmax``, number of entries in cross correlation phase histogram.
     - ``pdiv``, divisor to reduce number of entries in phase histogram.
     - ``win``, arrival window.
@@ -2937,8 +2963,8 @@ class SimfcsFbd(LfdFile):
         decoder = f'_b{bytes_}w{self.windows}c{self.channels}'
         try:
             return getattr(self, decoder)()
-        except Exception:
-            raise ValueError(f'Decoder{decoder} not implemented')
+        except Exception as exc:
+            raise ValueError(f'Decoder{decoder} not implemented') from exc
 
     @staticmethod
     def _b4w8c4():
@@ -3307,8 +3333,7 @@ class SimfcsFbd(LfdFile):
             self.scanner_line_length = int(hdr['line_length'])
         if self.scanner_line_start < 0:
             self.scanner_line_start = int(hdr['x_starting_pixel'])
-        if self.scanner_frame_start < 0:
-            self.scanner_frame_start = 0
+        self.scanner_frame_start = max(self.scanner_frame_start, 0)
 
         if hdr['frame_time'] >= hdr['line_time'] > 1.0:
             if self.frame_size < 0:
@@ -3343,8 +3368,7 @@ class SimfcsFbd(LfdFile):
                         ]
                     except IndexError:
                         dwt = 1.0
-                finally:
-                    self.pixel_dwell_time = dwt
+                self.pixel_dwell_time = dwt
 
         self._data_offset = 65536  # start of encoded data; contains 2 headers
 
@@ -3492,8 +3516,7 @@ class SimfcsFbd(LfdFile):
                     )
                 else:
                     continue
-                if line_num > lines:
-                    line_num = lines
+                line_num = min(line_num, lines)
             line_num = int(round(line_num))
 
         if not frame_markers:
@@ -3871,7 +3894,7 @@ class GlobalsLif(LfdFile):
             number = int(rec['number'])
             if number == 0:
                 continue
-            elif number > 25:
+            if number > 25:
                 warnings.warn('corrupted record')
                 continue
             record = self.Record()
@@ -3934,6 +3957,10 @@ class GlobalsLif(LfdFile):
             ax.semilogx(rec['frequency'], rec['deltap'], '+-')
             ax.semilogx(rec['frequency'], rec['deltam'], '.-')
 
+    def _totiff(self, tif: TiffFile, **kwargs) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('GlobalsLif file does not contain image data')
+
     def _str(self) -> str | None:
         """Return string with information about file."""
         return f'records: {len(self._records)}'
@@ -3975,6 +4002,7 @@ class GlobalsAscii(LfdFile):
     """
 
     _filemode = 'r'
+    _fileencoding = 'cp1252'
     _filepattern = r'.*\.(\d){3}$'
     _figureargs = {'figsize': (6, 5)}
 
@@ -4061,6 +4089,10 @@ class GlobalsAscii(LfdFile):
         ax.semilogx(data[0], data[4] * 100, 'gx-')
         ax.set_xlabel('Frequency (MHz)')
 
+    def _totiff(self, tif: TiffFile, **kwargs) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('GlobalsAscii file does not contain image data')
+
     def _str(self) -> str:
         """Return string with information about file."""
         return format_dict(self._record)
@@ -4122,7 +4154,7 @@ class VistaIfi(LfdFile):
         )[0]
         if h['signature'] != b'VISTAIMAGE':
             raise LfdFileError(self)
-        if h['version'] not in (4,):
+        if h['version'] != 4:
             log_warning(f'unrecognized VistaIfi file version {h["version"]}')
         self.shape = tuple(int(i) for i in reversed(h['dimensions']))
         if self.shape[0] == 1:
@@ -4252,7 +4284,7 @@ class VistaIfli(LfdFile):
             shape=1,
             byteorder='<',
         )[0]
-        if h['version'] not in (1, 13):
+        if h['version'] not in {1, 13}:
             log_warning(f'unrecognized VistaIfli file version {h["version"]}')
         if h['compression'] != 0:
             raise NotImplementedError(
@@ -4479,7 +4511,7 @@ class FlimfastFlif(LfdFile):
             'S': lambda x: str(x, 'latin-1'),
         }
         for name, dtype in self.header.dtype.fields.items():
-            if name not in ('_', 'magic'):
+            if name not in {'_', 'magic'}:
                 dtype = dtypes[dtype[0].kind]
                 metadata[name] = dtype(self.header[name])
         for name, dtype in self.records.dtype.fields.items():
@@ -4839,7 +4871,7 @@ class BioradPic(LfdFile):
             except Exception as exc:
                 warnings.warn(f'failed to read PIC notes: {exc}')
         ndims = len(self.spacing)
-        if npic > 1 and ndims in (2, 3):
+        if npic > 1 and ndims in {2, 3}:
             self.axes = 'ZYX' if ndims == 3 else 'CYX'
 
     def _notes(
@@ -4957,7 +4989,7 @@ def bioradpic_write(
 
     """
     data = numpy.asarray(data)
-    if data.ndim not in (2, 3):
+    if data.ndim not in {2, 3}:
         raise ValueError('data must be 2 or 3 dimensional')
     if data.dtype not in ('uint8', 'uint16'):
         raise ValueError('data type must be uint18 or uint16')
@@ -5098,7 +5130,7 @@ class Ccp4Map(LfdFile):
         """Read CCP4 file header and symboltable."""
         assert self._fh is not None
         header = self._fh.read(1024)
-        if header[208:212] not in (b'MAP ', b'PAM\x00', b'MAP\x00'):
+        if header[208:212] not in {b'MAP ', b'PAM\x00', b'MAP\x00'}:
             raise LfdFileError(self, f' {header[:32]}')
         try:
             (
@@ -5505,6 +5537,7 @@ class VoxxMap(LfdFile):
     """
 
     _filemode = 'r'
+    _fileencoding = 'latin-1'
     _filepattern = r'.*\.map$'
     _figureargs = {'figsize': (6, 1)}
 
@@ -5606,7 +5639,7 @@ class NetpbmFile(LfdFile):
     def _init(self, **kwargs) -> None:
         """Validate file is a Netpbm file."""
         assert self._fh is not None
-        if self._fh.read(2) not in (
+        if self._fh.read(2) not in {
             b'P1',
             b'P2',
             b'P3',
@@ -5616,7 +5649,7 @@ class NetpbmFile(LfdFile):
             b'P7',
             b'PF',
             b'Pf',
-        ):
+        }:
             raise LfdFileError(self)
         self._fh.seek(0)
 
@@ -5643,7 +5676,7 @@ class NetpbmFile(LfdFile):
         """Write image data to TIFF file."""
         kwargs.update(metadata=None)
         data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in (3, 4):
+        if data.ndim > 2 and data.shape[-1] in {3, 4}:
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
@@ -5718,7 +5751,7 @@ class OifFile(LfdFile):
     def _totiff(self, tif: TiffFile, **kwargs) -> None:
         """Write image data to TIFF file."""
         data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in (3, 4):
+        if data.ndim > 2 and data.shape[-1] in {3, 4}:
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
@@ -5839,12 +5872,12 @@ class TiffFile(LfdFile):
     def _init(self, series: int = 0, **kwargs) -> None:
         """Validate file is a TIFF file."""
         assert self._fh is not None
-        if self._fh.read(4) not in (
+        if self._fh.read(4) not in {
             b'MM\x00*',
             b'II*\x00',
             b'MM\x00+',
             b'II+\x00',
-        ):
+        }:
             raise LfdFileError(self)
         self._fh.seek(0)
 
@@ -5882,7 +5915,7 @@ class TiffFile(LfdFile):
     def _totiff(self, tif: TiffFile, **kwargs) -> None:
         """Write image data to TIFF file."""
         data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in (3, 4):
+        if data.ndim > 2 and data.shape[-1] in {3, 4}:
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
@@ -6080,6 +6113,7 @@ def convert2tiff(
         else:
             if verbose:
                 print('failed')
+            continue
         registry.remove(cls)
         registry.insert(0, cls)
 
