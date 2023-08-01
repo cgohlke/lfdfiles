@@ -42,7 +42,7 @@
 
 """
 
-__version__ = '2023.4.20'
+__version__ = '2023.8.1'
 
 
 from cython.parallel import parallel, prange
@@ -323,7 +323,7 @@ def sflim_decode(
         ssize_t size = data.size
         ssize_t address
         openmp.omp_lock_t lock
-        int ret
+        ssize_t ret
 
     if size == 0:
         return
@@ -359,7 +359,7 @@ def sflim_decode(
         openmp.omp_destroy_lock(&lock)
 
 
-cdef int _decode_address(
+cdef ssize_t _decode_address(
     const ssize_t address,
     const uint32_t[::1] data,
     sflim_t[:, :, :, ::1] sflim,
@@ -454,4 +454,222 @@ cdef int _decode_address(
             sflim[c, h, y, x] += 1
             openmp.omp_unset_lock(&lock)
 
-    return <int> frames
+    return frames
+
+
+def sflim_decode_photons(
+    const uint32_t[::1] data,
+    uint16_t[:, ::1] photons,
+    frameshape,
+    const uint64_t pixeltime,
+    uint64_t enabletime=0,
+    const ssize_t maxframes=-1,
+):
+    """Decode Kintex FLIMbox data to SLIM photon array.
+
+    This function is private and may change or be removed in future versions.
+
+    Parameters:
+        data (numpy.ndarray):
+            Data stream from Kintex FLIMbox. A `uint32` array.
+        photons (numpy.ndarray):
+            `uint16` array of shape `(number of photons, 5)`,
+            where arrival time, frame, channel, y and x position are stored for
+            each photon.
+        frameshape (tuple):
+            Shape of image frame.
+        pixeltime (int):
+            Pixel dwell time in FLIMbox units.
+            ``math.ceil(dwelltime * 256 / 255 * frequency_factor * frequency)``
+        enabletime (int):
+            Time in FLIMbox units to wait after detecting enable bit before
+            detecting next enable bit.
+        maxframes (int):
+            Maximum number of image frames to decode.
+
+    Returns:
+        Number of photons decoded.
+
+    Examples:
+        >>> import numpy, math
+        >>> from lfdfiles._lfdfiles import sflim_decode_photons
+        >>> data = numpy.fromfile(
+        ...     '20210123488_100x_NSC_166_TMRM_4_zoom4000_L115.bin',
+        ...      dtype=numpy.uint32
+        ... )
+        >>> frequency = 78e6
+        >>> frequency_factor = 0.9976
+        >>> dwelltime = 16e-6
+        >>> pixeltime = math.ceil(
+        ...     dwelltime * 256 / 255 * frequency_factor * frequency
+        ... )
+        >>> photons = numpy.zeros((2035488, 5), dtype=numpy.uint6)
+        >>> sflim_decode_photons(
+        ...     data, photons, (256, 342), pixeltime=pixeltime, maxframes=20
+        ... )
+        2035488
+        >>> photons[12345].tolist()
+        [205, 3, 2, 181, 51]
+
+    """
+    cdef:
+        ssize_t size = data.size
+        ssize_t ret, height, width, address, np
+        ssize_t maxphotons = photons.shape[0]
+
+    if size == 0:
+        return
+    if photons.shape[1] != 5:
+        raise ValueError(f'invalid photons shape {photons.shape} != (-1, 5)')
+
+    if len(frameshape) != 2 or frameshape[0] < 1 or frameshape[1] < 1:
+        raise ValueError('invalid frameshape')
+
+    height = frameshape[0]
+    width = frameshape[1]
+
+    if enabletime == 0:
+        enabletime = pixeltime * width
+
+    with nogil:
+        np = 0
+        for address in range(8):
+            ret = _decode_address_photons(
+                address,
+                data,
+                photons[np:],
+                size,
+                height,
+                width,
+                pixeltime,
+                enabletime,
+                maxframes,
+            )
+            if ret < 0:
+                raise ValueError(
+                    f'no start of frame found for address {address}'
+                )
+            np += ret
+            if np >= maxphotons:
+                break
+
+    return np
+
+
+cdef ssize_t _decode_address_photons(
+    const ssize_t address,
+    const uint32_t[::1] data,
+    uint16_t[:, ::1] photons,
+    const ssize_t size,
+    const ssize_t height,
+    const ssize_t width,
+    const uint64_t pixeltime,
+    const uint64_t enabletime,
+    const ssize_t maxframes,
+) nogil:
+    """Decode photons' time, channel, and pixel. Return number of photons."""
+    cdef:
+        ssize_t maxphotons = photons.shape[0]
+        ssize_t framesize = width * height
+        ssize_t i, y, x, start, frames, pixelindex, np
+        uint64_t macrotime, macrotime0
+        uint32_t d, pcc, tcc, tcc0, enable, ph
+
+    # seek to first frame
+    start = 0
+    for i in range(size):
+        if (data[i] & <uint32_t> MASK_ENA) >> SHR_ENA:
+            start = i
+            break
+    else:
+        return -1
+
+    tcc0 = data[start] & <uint32_t> MASK_TCC
+    macrotime = tcc0
+    macrotime0 = tcc0
+    frames = 0
+    np = 0
+
+    # loop over all data items
+    for i in range(start, size):
+
+        d = data[i]
+
+        if <uint32_t> address != (d & <uint32_t> MASK_ADR) >> SHR_ADR:
+            continue
+
+        pcc = d & <uint32_t> MASK_PCC
+        tcc = d & <uint32_t> MASK_TCC
+        enable = (d & <uint32_t> MASK_ENA) >> SHR_ENA
+
+        if tcc < tcc0:
+            macrotime += 4096
+        tcc0 = tcc
+
+        if enable and (macrotime - macrotime0 + tcc) > enabletime:
+            if frames == maxframes:
+                break
+            frames += 1
+            macrotime0 = macrotime
+
+        pixelindex = <ssize_t> ((macrotime - macrotime0 + tcc) // pixeltime)
+        if pixelindex >= framesize:
+            # skipped += 1
+            continue
+
+        x = pixelindex % width
+        y = pixelindex // width
+
+        ph = (d & <uint32_t> MASK_PH0) >> SHR_PH0
+        if ph:
+            photons[np, 0] = (
+                (pcc + 32 * ((d & <uint32_t> MASK_WN0) >> SHR_WN0)) % 256
+            )
+            photons[np, 1] = <uint16_t> frames
+            photons[np, 2] = address * 4
+            photons[np, 3] = y
+            photons[np, 4] = x
+            np += 1
+            if np == maxphotons:
+                break
+
+        ph = (d & <uint32_t> MASK_PH1) >> SHR_PH1
+        if ph:
+            photons[np, 0] = (
+                (pcc + 32 * ((d & <uint32_t> MASK_WN1) >> SHR_WN1)) % 256
+            )
+            photons[np, 1] = <uint16_t> frames
+            photons[np, 2] = address * 4 + 1
+            photons[np, 3] = y
+            photons[np, 4] = x
+            np += 1
+            if np == maxphotons:
+                break
+
+        ph = (d & <uint32_t> MASK_PH2) >> SHR_PH2
+        if ph:
+            photons[np, 0] = (
+                (pcc + 32 * ((d & <uint32_t> MASK_WN2) >> SHR_WN2)) % 256
+            )
+            photons[np, 1] = <uint16_t> frames
+            photons[np, 2] = address * 4 + 2
+            photons[np, 3] = y
+            photons[np, 4] = x
+            np += 1
+            if np == maxphotons:
+                break
+
+        ph = (d & <uint32_t> MASK_PH3) >> SHR_PH3
+        if ph:
+            photons[np, 0] = (
+                (pcc + 32 * ((d & <uint32_t> MASK_WN3) >> SHR_WN3)) % 256
+            )
+            photons[np, 1] = <uint16_t> frames
+            photons[np, 2] = address * 4 + 3
+            photons[np, 3] = y
+            photons[np, 4] = x
+            np += 1
+            if np == maxphotons:
+                break
+
+    return np
