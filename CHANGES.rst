@@ -1,6 +1,11 @@
 Revisions
 ---------
 
+2023.8.1
+
+- Specify encoding of text files.
+- Fix linting issues.
+
 2023.4.20
 
 - Improve type hints.
