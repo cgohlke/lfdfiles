@@ -18,7 +18,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.4.20
+:Version: 2023.8.1
 
 Quickstart
 ----------
@@ -32,6 +32,8 @@ Print the console script usage::
 
     python -m lfdfiles --help
 
+The lfdfiles library is type annotated and documented via docstrings.
+
 See `Examples`_ for using the programming interface.
 
 Source code and support are available on
@@ -43,20 +45,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.3
-- `Cython <https://pypi.org/project/cython/>`_ 0.29.34 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.23.5
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.4.12(optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.4, 3.12.0b4
+- `Cython <https://pypi.org/project/cython/>`_ 0.29.36 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.25.1
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.7.18 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile />`_ 2022.9.29 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.1.1 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.1
+- `Netpbmfile <https://pypi.org/project/netpbmfile />`_ 2023.6.15 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.2
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.1.3
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.6
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2023.8.1
+
+- Specify encoding of text files.
+- Fix linting issues.
 
 2023.4.20
 
