@@ -2,6 +2,7 @@ include LICENSE
 include README.rst
 include CHANGES.rst
 
+include lfdfiles/py.typed
 include lfdfiles/_lfdfiles.c
 include lfdfiles/_lfdfiles.pyx
 
