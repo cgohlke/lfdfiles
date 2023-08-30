@@ -1,6 +1,11 @@
 Revisions
 ---------
 
+2023.8.30
+
+- Fix type hint issues.
+- Add py.typed marker.
+
 2023.8.1
 
 - Specify encoding of text files.
@@ -139,4 +144,4 @@ Revisions
 2013.8.10
 
 - Read second harmonics FLIMbox data.
-- ...
+- …
