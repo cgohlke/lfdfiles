@@ -193,7 +193,7 @@ def main() -> None:
                 print()
                 timer.print('Done in')
 
-    fbd2b64(prog_name='fbd2b64')
+    fbd2b64(prog_name='fbd2b64')  # pylint: disable=no-value-for-parameter
 
 
 if __name__ == '__main__':
