@@ -42,7 +42,7 @@
 
 """
 
-__version__ = '2023.8.1'
+__version__ = '2023.8.30'
 
 
 from cython.parallel import parallel, prange
@@ -246,29 +246,31 @@ def simfcsfbd_histogram(
                         hist_out[f, c, idx, w] += 1
 
 
-DEF MASK_PCC = 0b00000000000000000000000011111111
-DEF MASK_TCC = 0b00000000000000000000111111111111
-DEF MASK_ENA = 0b00000000000000000001000000000000
-DEF MASK_WN0 = 0b00000000000000001110000000000000
-DEF MASK_PH0 = 0b00000000000000010000000000000000
-DEF MASK_PH1 = 0b00000000000000100000000000000000
-DEF MASK_WN1 = 0b00000000000111000000000000000000
-DEF MASK_WN2 = 0b00000000111000000000000000000000
-DEF MASK_PH2 = 0b00000001000000000000000000000000
-DEF MASK_PH3 = 0b00000010000000000000000000000000
-DEF MASK_WN3 = 0b00011100000000000000000000000000
-DEF MASK_ADR = 0b11100000000000000000000000000000
+cdef enum:
+    MASK_PCC = 0b00000000000000000000000011111111
+    MASK_TCC = 0b00000000000000000000111111111111
+    MASK_ENA = 0b00000000000000000001000000000000
+    MASK_WN0 = 0b00000000000000001110000000000000
+    MASK_PH0 = 0b00000000000000010000000000000000
+    MASK_PH1 = 0b00000000000000100000000000000000
+    MASK_WN1 = 0b00000000000111000000000000000000
+    MASK_WN2 = 0b00000000111000000000000000000000
+    MASK_PH2 = 0b00000001000000000000000000000000
+    MASK_PH3 = 0b00000010000000000000000000000000
+    MASK_WN3 = 0b00011100000000000000000000000000
+    MASK_ADR = 0b11100000000000000000000000000000
 
-DEF SHR_ENA = 12
-DEF SHR_WN0 = 13
-DEF SHR_PH0 = 16
-DEF SHR_PH1 = 17
-DEF SHR_WN1 = 18
-DEF SHR_WN2 = 21
-DEF SHR_PH2 = 24
-DEF SHR_PH3 = 25
-DEF SHR_WN3 = 26
-DEF SHR_ADR = 29
+cdef enum:
+    SHR_ENA = 12
+    SHR_WN0 = 13
+    SHR_PH0 = 16
+    SHR_PH1 = 17
+    SHR_WN1 = 18
+    SHR_WN2 = 21
+    SHR_PH2 = 24
+    SHR_PH3 = 25
+    SHR_WN3 = 26
+    SHR_ADR = 29
 
 
 def sflim_decode(
@@ -626,9 +628,9 @@ cdef ssize_t _decode_address_photons(
                 (pcc + 32 * ((d & <uint32_t> MASK_WN0) >> SHR_WN0)) % 256
             )
             photons[np, 1] = <uint16_t> frames
-            photons[np, 2] = address * 4
-            photons[np, 3] = y
-            photons[np, 4] = x
+            photons[np, 2] = <uint16_t> (address * 4)
+            photons[np, 3] = <uint16_t> y
+            photons[np, 4] = <uint16_t> x
             np += 1
             if np == maxphotons:
                 break
@@ -639,9 +641,9 @@ cdef ssize_t _decode_address_photons(
                 (pcc + 32 * ((d & <uint32_t> MASK_WN1) >> SHR_WN1)) % 256
             )
             photons[np, 1] = <uint16_t> frames
-            photons[np, 2] = address * 4 + 1
-            photons[np, 3] = y
-            photons[np, 4] = x
+            photons[np, 2] = <uint16_t> (address * 4 + 1)
+            photons[np, 3] = <uint16_t> y
+            photons[np, 4] = <uint16_t> x
             np += 1
             if np == maxphotons:
                 break
@@ -652,9 +654,9 @@ cdef ssize_t _decode_address_photons(
                 (pcc + 32 * ((d & <uint32_t> MASK_WN2) >> SHR_WN2)) % 256
             )
             photons[np, 1] = <uint16_t> frames
-            photons[np, 2] = address * 4 + 2
-            photons[np, 3] = y
-            photons[np, 4] = x
+            photons[np, 2] = <uint16_t> (address * 4 + 2)
+            photons[np, 3] = <uint16_t> y
+            photons[np, 4] = <uint16_t> x
             np += 1
             if np == maxphotons:
                 break
@@ -665,9 +667,9 @@ cdef ssize_t _decode_address_photons(
                 (pcc + 32 * ((d & <uint32_t> MASK_WN3) >> SHR_WN3)) % 256
             )
             photons[np, 1] = <uint16_t> frames
-            photons[np, 2] = address * 4 + 3
-            photons[np, 3] = y
-            photons[np, 4] = x
+            photons[np, 2] = <uint16_t> (address * 4 + 3)
+            photons[np, 3] = <uint16_t> y
+            photons[np, 4] = <uint16_t> x
             np += 1
             if np == maxphotons:
                 break
