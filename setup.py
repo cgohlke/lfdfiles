@@ -2,10 +2,10 @@
 
 """Lfdfiles package Setuptools script."""
 
-import sys
 import re
+import sys
 
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext as _build_ext
 
 buildnumber = ''
@@ -54,7 +54,7 @@ if 'sdist' in sys.argv:
         fh.write(license)
 
     revisions = search(
-        r'(?:\r\n|\r|\n){2}(Revisions.*)- \.\.\.',
+        r'(?:\r\n|\r|\n){2}(Revisions.*)- …',
         readme,
         re.MULTILINE | re.DOTALL,
     ).strip()
@@ -141,6 +141,7 @@ setup(
     },
     tests_require=['pytest'],
     packages=['lfdfiles'],
+    package_data={'lfdfiles': ['py.typed']},
     entry_points={
         'console_scripts': [
             'lfdfiles = lfdfiles.__main__:main',
