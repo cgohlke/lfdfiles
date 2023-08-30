@@ -9,6 +9,7 @@ Usage: python fbdfix.py directory_or_file_name
 import os
 
 import numpy
+
 import lfdfiles
 
 
@@ -67,8 +68,8 @@ def fbdfix(
 
 def main():
     """Command line script main function."""
-    import sys
     import glob
+    import sys
 
     if len(sys.argv) == 2:
         arg = sys.argv[1]
