@@ -1,6 +1,12 @@
 Revisions
 ---------
 
+2023.9.16
+
+- Rewrite VistaIfli based on file format specification (breaking).
+- Define positional and keyword parameters (breaking).
+- SimfcsFbd.asarray returns bins only (breaking).
+
 2023.8.30
 
 - Fix type hint issues.
