@@ -7,7 +7,7 @@ to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
 For example:
 
-- SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ B64, I64, Z64, R64
+- SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
 - FLIMbox FBD, FBF
 - GLOBALS LIF, ASCII
 - CCP4 MAP
@@ -18,7 +18,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.8.30
+:Version: 2023.9.16
 
 Quickstart
 ----------
@@ -52,13 +52,19 @@ This revision was tested with the following requirements and dependencies
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.2
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.3
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2023.9.16
+
+- Rewrite VistaIfli based on file format specification (breaking).
+- Define positional and keyword parameters (breaking).
+- SimfcsFbd.asarray returns bins only (breaking).
 
 2023.8.30
 
@@ -100,16 +106,6 @@ Revisions
 - Drop support for Python 3.7 and NumPy < 1.19 (NEP29).
 
 2021.7.15
-
-- Refactor SimfcsFbd initialization.
-- Print tracebacks of failing plugins in LfdFile.
-
-2021.7.11
-
-- Calculate pixel_dwell_time and frame_size for FBD files with header.
-- Disable simfcsfbd_decode and simfcsfbd_histogram Python code (breaking).
-
-2021.6.25
 
 - …
 
