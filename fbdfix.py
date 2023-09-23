@@ -25,7 +25,7 @@ def fbdfix(
         dirname, fname = os.path.split(fbdfile)
         outfile = os.path.join(dirname, '_' + fname)
 
-    with lfdfiles.SimfcsFbd(fbdfile) as fbd:
+    with lfdfiles.FlimboxFbd(fbdfile) as fbd:
         bins, times, markers = fbd.decode()
 
     frame_durations = numpy.diff(times[markers]).astype(numpy.int64)
