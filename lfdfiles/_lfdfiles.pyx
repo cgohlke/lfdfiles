@@ -42,7 +42,7 @@
 
 """
 
-__version__ = '2023.8.30'
+__version__ = '2023.x.x'
 
 
 from cython.parallel import parallel, prange
@@ -59,14 +59,18 @@ ctypedef fused times_t:
     uint32_t
     uint64_t
 
+ctypedef fused bins_t:
+    int8_t
+    int16_t
+
 ctypedef fused sflim_t:
     uint8_t
     uint16_t
 
 
-def simfcsfbd_decode(
+def flimbox_decode(
     data_t[::] data,
-    int8_t[:, ::1] bins_out,
+    bins_t[:, ::1] bins_out,
     times_t[::1] times_out,
     ssize_t[::1] markers_out,
     int windows,
@@ -89,8 +93,9 @@ def simfcsfbd_decode(
             FLIMbox data stream without header.
             An `uint16` (16-bit FLIMbox) or `uint32` (32-bit FLIMbox) array.
         bins_out (numpy.ndarray):
-            `ssize_t` array of shape `(channels, data.size)`, where decoded
-            cross correlation phase indices are returned.
+            Cross correlation phase index for all channels and data points.
+            A `int8` or `int16` array of shape `(channels, data.size)`, where
+            decoded cross correlation phase indices are returned.
             A value of -1 means no photon was counted.
         times_out (numpy.ndarray):
             `uint32` or `uint64` array of length `data.size`, where
@@ -154,8 +159,9 @@ def simfcsfbd_decode(
             if win < maxwindex:
                 win = <int>(decoder_table[c, win])
                 if win >= 0:
-                    bins_out[c, i] = <int8_t>(
-                        (pmax-1 - (pcc + win * pmax_win) % pmax) // pdiv)
+                    bins_out[c, i] = <bins_t>(
+                        (pmax-1 - (pcc + win * pmax_win) % pmax) // pdiv
+                    )
                 else:
                     bins_out[c, i] = -1  # no event
             else:
@@ -188,8 +194,8 @@ def simfcsfbd_decode(
             times_out[i] = times_out[i-1] + (tcc_max - t1) + t0
 
 
-def simfcsfbd_histogram(
-    int8_t[:, ::1] bins,
+def flimbox_histogram(
+    bins_t[:, ::1] bins,
     times_t[::1] times,
     frame_markers,
     double units_per_sample,
@@ -201,7 +207,7 @@ def simfcsfbd_histogram(
     Parameters:
         bins (numpy.ndarray):
             Cross correlation phase index for all channels and data points.
-            A `int8` array of shape `(channels, data.size)`.
+            A `int8` or `int16` array of shape `(channels, data.size)`.
             A value of -1 means no photon was counted.
         times (numpy.ndarray):
             Times in FLIMbox counter units at each data point.
@@ -225,7 +231,7 @@ def simfcsfbd_histogram(
         ssize_t nwindows = hist_out.shape[3]
         ssize_t i, j, k, f, c, idx
         times_t t0
-        int8_t w
+        bins_t w
 
     if bins.shape[0] != hist_out.shape[1]:
         raise ValueError('shape mismatch between bins and hist_out')
