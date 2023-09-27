@@ -38,7 +38,7 @@ to store experimental data and metadata at the
 For example:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
-- FLIMbox FBD, FBF
+- FLIMbox FBD, FBF, FBS.XML
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.9.16
+:Version: 2023.9.26
 
 Quickstart
 ----------
@@ -78,7 +78,7 @@ This revision was tested with the following requirements and dependencies
 - `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12.0rc
 - `Cython <https://pypi.org/project/cython/>`_ 0.29.36 (build)
 - `NumPy <https://pypi.org/project/numpy/>`_ 1.25.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.8.30 (optional)
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.9.26 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
@@ -89,6 +89,15 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2023.9.26
+
+- Remove phasor and lifetime methods from VistaIfli (breaking).
+- Rename SimfcsFbd and SimfcsFbf to FlimboxFbd and FlimboxFbf (breaking).
+- Deprecate SimfcsFbd and SimfcsFbf.
+- Support int16 FLIMbox cross correlation phase indices (bins).
+- Add FlimboxFbs class for ISS VistaVision FLIMbox settings.
+- Add decoder for 32-bit, 16 windows, 4 channels FlimboxFbd (untested).
 
 2023.9.16
 
@@ -227,7 +236,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2023.9.16'
+__version__ = '2023.9.26'
 
 __all__ = [
     'LfdFile',
@@ -246,13 +255,14 @@ __all__ = [
     'SimfcsRef',
     'SimfcsBh',
     'SimfcsBhz',
-    'SimfcsFbf',
-    'SimfcsFbd',
-    'SimfcsGpSeries',
     'SimfcsB64',
     'SimfcsI64',
     'SimfcsZ64',
     'SimfcsR64',
+    'SimfcsGpSeries',
+    'FlimboxFbd',
+    'FlimboxFbf',
+    'FlimboxFbs',
     'GlobalsLif',
     'GlobalsAscii',
     'VistaIfli',
@@ -280,11 +290,17 @@ __all__ = [
     'vaa3draw_write',
     'voxxmap_write',
     'bioradpic_write',
+    'flimbox_histogram',
+    'flimbox_decode',
+    'sflim_decode',
+    # deprecated
+    'SimfcsFbf',
+    'SimfcsFbd',
     'simfcsfbd_histogram',
     'simfcsfbd_decode',
-    'sflim_decode',
 ]
 
+import copy
 import math
 import os
 import re
@@ -494,7 +510,7 @@ class LfdFile(metaclass=LfdFileRegistry):
             skip = set()
             if not validate:
                 # skip formats that are too generic
-                skip.update((SimfcsBh, SimfcsCyl, SimfcsFbd, FliezI16))
+                skip.update((SimfcsBh, SimfcsCyl, FlimboxFbd, FliezI16))
         exceptions = []
         for lfdfile in registry:
             if lfdfile in skip:
@@ -2498,119 +2514,33 @@ def simfcsr64_write(
         fh.write(rawdata)
 
 
-class SimfcsFbf(LfdFile):
-    """FLIMbox firmware.
+class SimfcsGpSeries(LfdFileSequence):
+    """SimFCS generalized polarization image series.
 
-    SimFCS FBF files contain FLIMbox device firmwares, stored in binary form
-    following a NULL terminated ASCII string containing properties and
-    description.
-
-    The properties (lower cased) can be accessed via dictionary interface.
-
-    Parameters:
-        filename:
-            Name of file to open.
-        maxheaderlength:
-            Maximum length of header.
+    SimFCS GP series contain intensity images from two channels, stored in
+    separate :py:class:`SimfcsInt` files with consecutive names.
 
     Examples:
-        >>> with SimfcsFbf('simfcs.fbf') as f:
-        ...     f['windows']
-        ...     f['channels']
-        ...     f['secondharmonic']
-        ...     'extclk' in f
-        16
-        2
-        0
-        True
+        >>> ims = SimfcsGpSeries('gpint/v*.int')
+        >>> ims.axes
+        'CI'
+        >>> ims = ims.asarray()
+        >>> ims.shape
+        (2, 135, 256, 256)
 
     """
 
-    _filepattern = r'.*\.(fbf)$'
-    _noplot = True
-
-    _settings: dict[str, Any]
-
-    def _init(self, *, maxheaderlength: int = 1024, **kwargs: Any) -> None:
-        """Read and parse NULL terminated header string."""
-        assert self._fh is not None
-        try:
-            # the first 1024 bytes contain the header
-            header = self._fh.read(maxheaderlength).split(b'\x00', 1)[0]
-        except ValueError as exc:
-            raise LfdFileError(self) from exc
-        header = bytes2str(header)
-        if len(header) != maxheaderlength:
-            self._fh.seek(len(header) + 1)
-        try:
-            header, comment = header.rsplit('/', 1)
-            comment = [comment]
-        except ValueError:
-            comment = []
-        self._settings = {}
-        for name, value, unit in re.findall(
-            r'([a-zA-Z\s]*)([.\d]*)([a-zA-Z\d]*)/', header
-        ):
-            name = name.strip().lower()
-            if not name:
-                name = {'w': 'windows', 'ch': 'channels'}.get(unit, None)
-                unit = ''
-            if not name:
-                comment.append(name + value + unit)
-                continue
-            if unit == 'MHz':
-                unit = 1000000
-            try:
-                if unit:
-                    value = int(value) * int(unit)
-                else:
-                    value = int(value)
-                unit = 0
-            except ValueError:
-                pass
-            self._settings[name] = (value + unit) if value != '' else True
-        cstr = '/'.join(reversed(comment))
-        if cstr:
-            self._settings['comment'] = cstr
-        if not self._settings:
-            raise LfdFileError(self)
-
-    def firmware(self) -> bytes:
-        """Return firmware as binary string."""
-        assert self._fh is not None
-        return self._fh.read()
-
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Raise ValueError."""
-        raise ValueError('SimfcsFbf file does not contain array data')
-
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        raise ValueError('SimfcsFbf file does not contain image data')
-
-    def _str(self) -> str | None:
-        """Return string with header settings."""
-        return format_dict(self._settings)
-
-    def __getitem__(self, key: str, /) -> Any:
-        return self._settings[key]
-
-    def __contains__(self, key: str, /) -> bool:
-        return key in self._settings
-
-    def __len__(self) -> int:
-        return len(self._settings)
-
-    def __iter__(self):
-        return iter(self._settings)
+    _readfunction = SimfcsInt
+    _indexpattern = r'(?P<C>\d)(?P<I>\d+)\.int'
 
 
-class SimfcsFbd(LfdFile):
+class FlimboxFbd(LfdFile):
     """FLIMbox data.
 
-    SimFCS FDB files contain encoded data from the FLIMbox device, storing a
+    FDB files contain encoded data from the FLIMbox device, storing a
     stream of 16-bit or 32-bit integers (data words) that can be decoded to
     photon arrival windows, channels, and times.
+    FBD files are written by SimFCS and VistaVision.
 
     The measurement's frame size, pixel dwell time, number of sampling
     windows, and scanner type are encoded in the last four letters of the
@@ -2618,6 +2548,8 @@ class SimfcsFbd(LfdFile):
     Newer FBD files, where the 3rd character in the file name tag is `0`,
     start with the first 1kB of the firmware file used for the measurement,
     followed by 31kB containing a binary record with measurement settings.
+    FBD files written by VistaVision are accompanied by FlimboxFbs setting
+    files.
 
     It depends on the application and its setting how to interpret the
     decoded data, for example, as time series, line scans, or image frames
@@ -2643,6 +2575,10 @@ class SimfcsFbd(LfdFile):
     - ``pdiv``, divisor to reduce number of entries in phase histogram.
     - ``win``, arrival window.
     - ``windows``, number of sampling windows.
+
+    The current implementation uses a decoder table to decode arrival windows
+    for each channel. This method is inefficient for 32-bit FLIMbox data
+    with large number of windows and channels.
 
     Parameters:
         filename:
@@ -2683,11 +2619,11 @@ class SimfcsFbd(LfdFile):
         **kwargs
             Additional arguments are ignored.
 
-
     Examples:
-        >>> with SimfcsFbd('simfcs$CBCO.fbd') as f:
-        ...     bins, times, markers = f.decode(word_count=500000,
-        ...                                     skip_words=1900000)
+        >>> with FlimboxFbd('flimbox$CBCO.fbd') as f:
+        ...     bins, times, markers = f.decode(
+        ...         word_count=500000, skip_words=1900000
+        ... )
         >>> print(bins[0, :2], times[:2], markers)
         [53 51] [ 0 42] [ 44097 124815]
         >>> hist = [numpy.bincount(b[b>=0]) for b in bins]
@@ -2704,6 +2640,9 @@ class SimfcsFbd(LfdFile):
 
     fbf: dict[str, Any] | None
     """FLIMbox firmware header settings, if any."""
+
+    fbs: dict[str, Any] | None
+    """FLIMbox settings from FBS.XML file, if any."""
 
     code: str
     """Four-character string from file name, if any."""
@@ -2758,6 +2697,7 @@ class SimfcsFbd(LfdFile):
         'channels',
         'harmonics',
         'pdiv',
+        'pmax',
         'pixel_dwell_time',
         'laser_frequency',
         'laser_factor',
@@ -3020,10 +2960,86 @@ class SimfcsFbd(LfdFile):
         """
         bytes_ = 4 if self.is_32bit else 2
         decoder = f'_b{bytes_}w{self.windows}c{self.channels}'
+        if (
+            self.windows == 16
+            and self.channels == 4
+            and self.fbf is not None
+            and self.fbf.get('time', '').endswith('Bit')
+        ):
+            t = self.fbf['time'][:-3]
+            decoder += f't{t}'
         try:
             return getattr(self, decoder)()
         except Exception as exc:
             raise ValueError(f'Decoder{decoder} not implemented') from exc
+
+    @staticmethod
+    def _b4w16c4t10() -> dict[str, NDArray[numpy.int16] | int]:
+        # return parameters to decode 32-bit, 16 windows, 4 channels (Spartan6)
+        # with line markers
+        # 0b00000000000000000000000011111111 cross correlation phase
+        # 0b00000000000000000000001111111111 cross correlation time  # 10 bit
+        # 0b00000000000000000000010000000000 start of frame marker
+        # 0b00000000000000000000100000000000 start of line marker
+        # 0b00000000000000000001000000000000 ch0 photon
+        # 0b00000000000000011110000000000000 ch0 window
+        # 0b00000000000000100000000000000000 ch1 photon
+        # 0b00000000001111000000000000000000 ch1 window
+        # 0b00000000010000000000000000000000 ch2 photon
+        # 0b00000111100000000000000000000000 ch2 window
+        # 0b00001000000000000000000000000000 ch3 photon
+        # 0b11110000000000000000000000000000 ch3 window
+        log_warning(
+            'FlimboxFbd: b4w16c4 decoder not tested. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
+        table = numpy.zeros((4, 2**20), numpy.int16)
+        table -= 1
+        for i in range(2**20):
+            if i & 0b1:
+                table[0, i] = (i & 0b11110) >> 1
+            if i & 0b100000:
+                table[1, i] = (i & 0b1111000000) >> 6
+            if i & 0b10000000000:
+                table[2, i] = (i & 0b111100000000000) >> 11
+            if i & 0b1000000000000000:
+                table[3, i] = (i & 0b11110000000000000000) >> 16
+        return {
+            'decoder_table': table,
+            'tcc_mask': 0x3FF,
+            'tcc_shr': 0,
+            'pcc_mask': 0xFF,
+            'pcc_shr': 0,
+            'marker_mask': 0x400,
+            'marker_shr': 10,
+            # 'line_mask': 0x800,
+            # 'line_shr': 11,
+            'win_mask': 0xFFFFF000,
+            'win_shr': 12,
+            # 'pdiv': 1
+        }
+
+    @staticmethod
+    def _b4w16c4t11() -> dict[str, NDArray[numpy.int16] | int]:
+        # return parameters to decode 32-bit, 16 windows, 4 channels (Spartan6)
+        # without line markers
+        # 0b00000000000000000000000011111111 cross correlation phase
+        # 0b00000000000000000000011111111111 cross correlation time  # 11 bit
+        # 0b00000000000000000000100000000000 start of frame marker
+        # 0b00000000000000000001000000000000 ch0 photon
+        # 0b00000000000000011110000000000000 ch0 window
+        # 0b00000000000000100000000000000000 ch1 photon
+        # 0b00000000001111000000000000000000 ch1 window
+        # 0b00000000010000000000000000000000 ch2 photon
+        # 0b00000111100000000000000000000000 ch2 window
+        # 0b00001000000000000000000000000000 ch3 photon
+        # 0b11110000000000000000000000000000 ch3 window
+        return {
+            **FlimboxFbd._b4w16c4t10(),
+            'tcc_mask': 0x7FF,
+            'marker_mask': 0x800,
+            'marker_shr': 11,
+        }
 
     @staticmethod
     def _b4w8c4() -> dict[str, NDArray[numpy.int16] | int]:
@@ -3039,19 +3055,19 @@ class SimfcsFbd(LfdFile):
         # 0b00000000111111110000000000000000 cross correlation phase
         # 0b00011111111111110000000000000000 cross correlation time
         # 0b01000000000000000000000000000000 start of frame marker
-        a = numpy.zeros((4, 65536), numpy.int16)
-        a -= 1
-        for i in range(65536):
+        table = numpy.zeros((4, 2**16), numpy.int16)
+        table -= 1
+        for i in range(2**16):
             if i & 0b1:
-                a[0, i] = (i & 0b1110) >> 1
+                table[0, i] = (i & 0b1110) >> 1
             if i & 0b10000:
-                a[1, i] = (i & 0b11100000) >> 5
+                table[1, i] = (i & 0b11100000) >> 5
             if i & 0b100000000:
-                a[2, i] = (i & 0b111000000000) >> 9
+                table[2, i] = (i & 0b111000000000) >> 9
             if i & 0b1000000000000:
-                a[3, i] = (i & 0b1110000000000000) >> 13
+                table[3, i] = (i & 0b1110000000000000) >> 13
         return {
-            'decoder_table': a,
+            'decoder_table': table,
             'tcc_mask': 0x1FFF0000,
             'tcc_shr': 16,
             'pcc_mask': 0xFF0000,
@@ -3063,22 +3079,19 @@ class SimfcsFbd(LfdFile):
         }
 
     @staticmethod
-    def _b4w16c2():
-        # return parameters to decode 32-bit, 16 windows, 2 channels (Spartan6)
-        # TODO
-        raise NotImplementedError
-
-    @staticmethod
     def _b2w4c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 4 windows, 2 channels
         # fmt: off
-        a = [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
+        table = numpy.array(
+            [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
               1, 0, 3, 2, 1, 0, 3, 2, 1, -1, 3, 2, -1, -1, 3, -1],
              [-1, -1, 0, -1, 1, -1, 2, -1, 3, 0, -1, -1, 0, 3, -1, 0,
-              1, 2, 2, 1, 2, 1, 1, 2, 3, -1, 0, 3, -1, -1, 3, -1]]
+              1, 2, 2, 1, 2, 1, 1, 2, 3, -1, 0, 3, -1, -1, 3, -1]],
+            numpy.int16
+        )
         # fmt: on
         return {
-            'decoder_table': numpy.array(a, numpy.int16),
+            'decoder_table': table,
             'tcc_mask': 0x3FF,
             'tcc_shr': 0,
             'pcc_mask': 0xFF,
@@ -3092,12 +3105,14 @@ class SimfcsFbd(LfdFile):
     @staticmethod
     def _b2w8c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 8 windows, 2 channels
-        a = numpy.zeros((2, 81), numpy.int16) - 1
-        a[0, 1:9] = range(8)
-        a[1, 9:17] = range(8)
-        a[:, 17:] = numpy.mgrid[0:8, 0:8].reshape(2, -1)[::-1, :]
+        # TODO: this does not correctly decode data acquired with ISS firmware
+        table = numpy.zeros((2, 81), numpy.int16)
+        table -= 1
+        table[0, 1:9] = range(8)
+        table[1, 9:17] = range(8)
+        table[:, 17:] = numpy.mgrid[0:8, 0:8].reshape(2, -1)[::-1, :]
         return {
-            'decoder_table': a,
+            'decoder_table': table,
             'tcc_mask': 0xFF,
             'tcc_shr': 0,
             'pcc_mask': 0x3F,
@@ -3111,8 +3126,12 @@ class SimfcsFbd(LfdFile):
     @staticmethod
     def _b2w8c4() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 8 windows, 4 channels
-        # Not tested.
-        a = numpy.zeros((4, 128), numpy.int16) - 1
+        log_warning(
+            'FlimboxFbd: b2w8c4 decoder not tested. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
+        table = numpy.zeros((4, 128), numpy.int16)
+        table -= 1
         for i in range(128):
             win = i & 0b0000111
             ch0 = (i & 0b0001000) >> 3
@@ -3122,15 +3141,15 @@ class SimfcsFbd(LfdFile):
             if ch0 + ch1 + ch2 + ch3 != 1:
                 continue
             if ch0:
-                a[0, i] = win
+                table[0, i] = win
             elif ch1:
-                a[1, i] = win
+                table[1, i] = win
             elif ch2:
-                a[2, i] = win
+                table[2, i] = win
             elif ch3:
-                a[3, i] = win
+                table[3, i] = win
         return {
-            'decoder_table': a,
+            'decoder_table': table,
             'tcc_mask': 0xFF,
             'tcc_shr': 0,
             'pcc_mask': 0x3F,
@@ -3144,15 +3163,19 @@ class SimfcsFbd(LfdFile):
     @staticmethod
     def _b2w16c1() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 16 windows, 1 channel
-        # Not tested.
-        a = numpy.zeros((1, 32), numpy.int16) - 1
+        log_warning(
+            'FlimboxFbd: b2w16c1 decoder not tested. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
+        table = numpy.zeros((1, 32), numpy.int16)
+        table -= 1
         for i in range(32):
             win = (i & 0b11110) >> 1
             ch0 = i & 0b00001
             if ch0:
-                a[0, i] = win
+                table[0, i] = win
         return {
-            'decoder_table': a,
+            'decoder_table': table,
             'tcc_mask': 0xFF,
             'tcc_shr': 0,
             'pcc_mask': 0x3F,
@@ -3166,8 +3189,12 @@ class SimfcsFbd(LfdFile):
     @staticmethod
     def _b2w16c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 16 windows, 2 channels
-        # Not tested.
-        a = numpy.zeros((2, 64), numpy.int16) - 1
+        log_warning(
+            'FlimboxFbd: b2w16c2 decoder not tested. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
+        table = numpy.zeros((2, 64), numpy.int16)
+        table -= 1
         for i in range(64):
             win = (i & 0b111100) >> 2
             ch0 = (i & 0b000010) >> 1
@@ -3175,11 +3202,11 @@ class SimfcsFbd(LfdFile):
             if ch0 + ch1 != 1:
                 continue
             if ch0:
-                a[0, i] = win
+                table[0, i] = win
             elif ch1:
-                a[1, i] = win
+                table[1, i] = win
         return {
-            'decoder_table': a,
+            'decoder_table': table,
             'tcc_mask': 0xFF,
             'tcc_shr': 0,
             'pcc_mask': 0x3F,
@@ -3194,13 +3221,19 @@ class SimfcsFbd(LfdFile):
     def _b2w32c2():
         # return parameters to decode 32 windows, 2 channels
         # TODO
-        raise NotImplementedError
+        raise NotImplementedError(
+            'FlimboxFbd: b2w32c2 decoder not implemented. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
 
     @staticmethod
     def _b2w64c1():
         # return parameters to decode 64 windows, 1 channel
         # TODO
-        raise NotImplementedError
+        raise NotImplementedError(
+            'FlimboxFbd: b2w64c1 decoder not implemented. '
+            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
+        )
 
     def _init(
         self,
@@ -3222,6 +3255,7 @@ class SimfcsFbd(LfdFile):
     ) -> None:
         """Initialize instance from file name code or file header."""
         self.fbf = None
+        self.fbs = None
         self.header = None
         self.code = code
         self.frame_size = frame_size
@@ -3242,19 +3276,24 @@ class SimfcsFbd(LfdFile):
 
         if not self.code:
             match = re.search(
-                r'.*\$([A-Z0]{4,4})\.fbd', self._filename, re.IGNORECASE
+                r'.*\$([A-Z][A-Z][A-Z0-9][A-Z])\.fbd',
+                self._filename,
+                re.IGNORECASE,
             )
             if match is None:
                 self.code = 'CFCS'  # old FLIMbox file ?
                 warnings.warn(
-                    'SimfcsFbd: failed to parse code from file name. '
+                    'FlimboxFbd: failed to parse code from file name. '
                     f'Using {self.code!r}'
                 )
             else:
                 self.code = match.group(1)
 
         assert len(self.code) == 4, code
-        if self.code[2] == '0':
+
+        if self.code[2].isnumeric() and self._from_fbs():
+            pass
+        elif self.code[2] == '0':
             self._from_header()
         else:
             self._from_code()
@@ -3278,6 +3317,56 @@ class SimfcsFbd(LfdFile):
             elif not value:
                 # empty str
                 raise ValueError(f"'{attr}' not initialized")
+
+    def _from_fbs(self) -> bool:
+        """Initialize instance from VistaVision settings file."""
+        fname = self.filename.rsplit('$', 1)[0] + '.fbs.xml'
+        if not os.path.exists(fname):
+            return False
+        # self.pdiv = 1
+        with FlimboxFbs(fname) as fbs:
+            scn = fbs['ScanParams']
+            self.fbf = fbf = _flimboxfbf_parse(
+                fbs['FirmwareParams']['Description']
+            )
+            self.is_32bit = '32fifo' in fbf['decoder']
+            if self.harmonics < 0:
+                self.harmonics = (1, 2)[fbf['secondharmonic']]
+            if self.windows < 0:
+                self.windows = fbf['windows']
+            if self.channels < 0:
+                self.channels = fbf['channels']
+            if self.synthesizer == '':
+                self.synthesizer = 'Unknown'
+            if self.scanner == '':
+                try:
+                    self.scanner = scn['ScannerInfo']['ScannerID']
+                except IndexError:
+                    self.scanner = 'Unknown'
+            if self.laser_frequency < 0:
+                self.laser_frequency = float(scn['ExcitationFrequency'])
+            if self.laser_factor < 0:
+                self.laser_factor = 1.0
+            if self.scanner_line_length < 0:
+                self.scanner_line_length = int(scn['ScanLineLength'])
+            if self.scanner_line_start < 0:
+                self.scanner_line_start = int(scn['ScanLineLeftBorder'])
+            if 'PixelOffsetToFrameFlag' in scn:
+                # TODO: check this
+                self.scanner_frame_start = scn['PixelOffsetToFrameFlag']
+            else:
+                self.scanner_frame_start = 0
+            if self.pixel_dwell_time < 0:
+                self.pixel_dwell_time = scn['PixelDwellTime']['value']
+            if self.frame_size < 0:
+                self.frame_size = scn['XPixels']
+            self.fbs = fbs.asdict()
+        self._fh.seek(0)
+        if self._fh.read(32).decode('cp1252').isprintable():
+            # header detected, assume encoded data starts at 33K
+            self._data_offset = 33792
+        self._fh.seek(0)
+        return True
 
     def _from_code(self):
         """Initialize instance from file name code."""
@@ -3324,8 +3413,8 @@ class SimfcsFbd(LfdFile):
     def _from_header(self) -> None:
         """Initialize instance from 32 KB file header."""
         # the first 1024 bytes contain the start of a FLIMbox firmware file
-        with SimfcsFbf(self._fh.name, validate=False) as fbf:
-            self.fbf = fbf._settings
+        with FlimboxFbf(self._fh.name, validate=False) as fbf:
+            self.fbf = fbf.asdict()
         assert self.fbf is not None
         assert self._fh is not None
 
@@ -3347,7 +3436,7 @@ class SimfcsFbd(LfdFile):
         ):
             # reload modified header
             self._header_t = (
-                SimfcsFbd._header_t[:20] + SimfcsFbd._header_t[28:]
+                FlimboxFbd._header_t[:20] + FlimboxFbd._header_t[28:]
             )
             self._fh.seek(1024)
             self.header = hdr = numpy.fromfile(self._fh, self._header_t, 1)[0]
@@ -3359,7 +3448,7 @@ class SimfcsFbd(LfdFile):
             self.windows = self.fbf.get('windows', windows)
             if self.windows != windows:
                 log_warning(
-                    'SimfcsFbd: '
+                    'FlimboxFbd: '
                     'windows mismatch between FBF and FBD header '
                     f'({self.windows!r} != {windows!r})'
                 )
@@ -3368,7 +3457,7 @@ class SimfcsFbd(LfdFile):
             self.channels = self.fbf.get('channels', channels)
             if self.channels != channels:
                 log_warning(
-                    'SimfcsFbd: '
+                    'FlimboxFbd: '
                     'channels mismatch between FBF and FBD header '
                     f'({self.channels!r} != {channels!r})'
                 )
@@ -3460,7 +3549,7 @@ class SimfcsFbd(LfdFile):
         max_markers: int = 65536,
         **kwargs: Any,
     ) -> tuple[
-        NDArray[numpy.int8],
+        NDArray[numpy.int8 | numpy.int16],
         NDArray[numpy.uint32 | numpy.uint64],
         NDArray[numpy.intp],
     ]:
@@ -3503,11 +3592,14 @@ class SimfcsFbd(LfdFile):
         if data.dtype != dtype:
             raise ValueError('invalid data dtype')
 
-        bins_out = numpy.empty((self.channels, data.size), dtype=numpy.int8)
+        bins_out = numpy.empty(
+            (self.channels, data.size),
+            dtype=numpy.int8 if self.pmax // self.pdiv <= 128 else numpy.int16,
+        )
         times_out = numpy.empty(data.size, dtype=numpy.uint64)
         markers_out = numpy.zeros(max_markers, dtype=numpy.intp)
 
-        simfcsfbd_decode(
+        flimbox_decode(
             data,
             bins_out,
             times_out,
@@ -3528,7 +3620,7 @@ class SimfcsFbd(LfdFile):
 
     def frames(
         self,
-        decoded: tuple[NDArray[Any], NDArray[Any], NDArray[Any]],
+        decoded: tuple[NDArray[Any], NDArray[Any], NDArray[Any]] | None,
         /,
         *,
         select_frames: slice | None = None,
@@ -3544,7 +3636,7 @@ class SimfcsFbd(LfdFile):
         Parameters:
             decoded:
                 Times and markers as returned by the decode function.
-                If None, the decode function is called.
+                If None, call :py:meth:`FlimboxFbd.decode`.
             select_frames:
                 Specifies which image frames to return.
                 By default, all frames are returned.
@@ -3555,7 +3647,7 @@ class SimfcsFbd(LfdFile):
                 Index of the frame duration cluster to use when calculating
                 the correction factor.
             **kwargs:
-                Additional arguments passed to :py:meth:`SimfcsFbd.decode`.
+                Additional arguments passed to :py:meth:`FlimboxFbd.decode`.
 
         Returns:
             1. shape: Dimensions of scanner frame.
@@ -3620,10 +3712,9 @@ class SimfcsFbd(LfdFile):
                 f'{self.laser_factor:.5f}.'
             ]
             if len(laser_factors) > 1:
+                factors = ', '.join(f'{i:.5f}' for i in laser_factors[:4])
                 msg.append(
-                    'The most probable correction factors are: {}'.format(
-                        ', '.join(f'{i:.5f}' for i in laser_factors[:4])
-                    )
+                    f'The most probable correction factors are: {factors}'
                 )
             warnings.warn('\n'.join(msg))
 
@@ -3653,16 +3744,19 @@ class SimfcsFbd(LfdFile):
         Parameters:
             decoded:
                 Bins, times, and markers as returned by the decode function.
-                If None, the `decode` function is called.
+                If None, call :py:meth:`FlimboxFbd.decode`.
             frames:
                 Scanner_shape and frame_markers as returned by the frames
-                function. If None, the `frames` function is called.
+                function.
+                If None, call :py:meth:`FlimboxFbd.frames`.
             integrate_frames:
                 Specifies which frames to sum. By default, all frames are
                 summed into one. If 0, no frames are summed.
             square_frame:
                 If True, return square image (frame_size x frame_size),
                 else return full scanner frame.
+            **kwargs:
+                Additional arguments passed to :py:meth:`FlimboxFbd.decode`.
 
         Returns:
             Image histogram of shape (number of frames, channels in bins
@@ -3686,7 +3780,7 @@ class SimfcsFbd(LfdFile):
         )
         result = numpy.zeros(shape, dtype=numpy.uint16)
         # calculate frame data histogram
-        simfcsfbd_histogram(
+        flimbox_histogram(
             bins,
             times,
             frame_markers,
@@ -3706,7 +3800,7 @@ class SimfcsFbd(LfdFile):
             ]
         return result
 
-    def _asarray(self, **kwargs: Any) -> NDArray[numpy.int8]:
+    def _asarray(self, **kwargs: Any) -> NDArray[numpy.int8 | numpy.int16]:
         """Return cross correlation phase index of shape (channels, size).
 
         A value of -1 means no photon was counted.
@@ -3765,7 +3859,191 @@ class SimfcsFbd(LfdFile):
         return '\n'.join(info)
 
 
-def _simfcsfbd_decode(
+class FlimboxFbs(LfdFile):
+    """FLIMbox settings.
+
+    VistaVision FBS.XML files contain FLIMbox acquisition settings in XML
+    format.
+
+    The properties can be accessed via dictionary interface.
+
+    Parameters:
+        filename: Name of file to open.
+
+    Examples:
+        >>> with FlimboxFbs('flimbox.fbs.xml') as f:
+        ...     f['ScanParams']['ExcitationFrequency']
+        20000000
+
+    """
+
+    _filemode = 'r'
+    _fileencoding = 'utf-8'
+    _filepattern = r'.*\.(fbs.xml)$'
+    _noplot = True
+
+    _settings: dict[str, Any]
+
+    def _init(self, **kwargs: Any) -> None:
+        """Read and parse XML."""
+        assert self._fh is not None
+        buf = self._fh.read(100)
+        if not ('<?xml ' in buf and '<FastFlimFbdDataSettings>' in buf):
+            raise LfdFileError(self)
+        self._fh.seek(0)
+        buf = self._fh.read()
+        info = tifffile.xml2dict(buf)
+        self._settings = info['FastFlimFbdDataSettings']
+        if not self._settings:
+            raise LfdFileError(self)
+
+    def asdict(self) -> dict[str, Any]:
+        """Return settings as dict."""
+        return copy.deepcopy(self._settings)
+
+    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
+        """Raise ValueError."""
+        raise ValueError('FlimboxFbs file does not contain array data')
+
+    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('FlimboxFbs file does not contain image data')
+
+    def _str(self) -> str | None:
+        """Return string with settings."""
+        return format_dict(self._settings)
+
+    def __getitem__(self, key: str, /) -> Any:
+        return self._settings[key]
+
+    def __contains__(self, key: str, /) -> bool:
+        return key in self._settings
+
+    def __len__(self) -> int:
+        return len(self._settings)
+
+    def __iter__(self):
+        return iter(self._settings)
+
+
+class FlimboxFbf(LfdFile):
+    """FLIMbox firmware.
+
+    FBF files contain FLIMbox device firmwares, stored in binary form
+    following a NULL terminated ASCII string containing properties and
+    description.
+
+    The properties (lower cased) can be accessed via dictionary interface.
+
+    Parameters:
+        filename:
+            Name of file to open.
+        maxheaderlength:
+            Maximum length of header.
+
+    Examples:
+        >>> with FlimboxFbf('flimbox.fbf') as f:
+        ...     f['windows']
+        ...     f['channels']
+        ...     f['secondharmonic']
+        ...     'extclk' in f
+        16
+        2
+        0
+        True
+
+    """
+
+    _filepattern = r'.*\.(fbf)$'
+    _noplot = True
+
+    _settings: dict[str, Any]
+
+    def _init(self, *, maxheaderlength: int = 1024, **kwargs: Any) -> None:
+        """Read and parse NULL terminated header string."""
+        assert self._fh is not None
+        try:
+            # the first 1024 bytes contain the header
+            header = self._fh.read(maxheaderlength).split(b'\x00', 1)[0]
+        except ValueError as exc:
+            raise LfdFileError(self) from exc
+        header = bytes2str(header)
+        if len(header) != maxheaderlength:
+            self._fh.seek(len(header) + 1)
+        self._settings = _flimboxfbf_parse(header)
+        if not self._settings:
+            raise LfdFileError(self)
+
+    def firmware(self) -> bytes:
+        """Return firmware as binary string."""
+        assert self._fh is not None
+        return self._fh.read()
+
+    def asdict(self) -> dict[str, Any]:
+        """Return settings as dict."""
+        return copy.deepcopy(self._settings)
+
+    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
+        """Raise ValueError."""
+        raise ValueError('FlimboxFbf file does not contain array data')
+
+    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
+        """Write image data to TIFF file."""
+        raise ValueError('FlimboxFbf file does not contain image data')
+
+    def _str(self) -> str | None:
+        """Return string with header settings."""
+        return format_dict(self._settings)
+
+    def __getitem__(self, key: str, /) -> Any:
+        return self._settings[key]
+
+    def __contains__(self, key: str, /) -> bool:
+        return key in self._settings
+
+    def __len__(self) -> int:
+        return len(self._settings)
+
+    def __iter__(self):
+        return iter(self._settings)
+
+
+def _flimboxfbf_parse(header: str, /) -> dict[str, Any]:
+    """Return FLIMbox firmware settings from header."""
+    settings: dict[str, Any] = {}
+    try:
+        header, comment_ = header.rsplit('/', 1)
+        comment = [comment_]
+    except ValueError:
+        comment = []
+    for name, value, unit in re.findall(
+        r'([a-zA-Z\s]*)([.\d]*)([a-zA-Z\d]*)/', header
+    ):
+        name = name.strip().lower()
+        if not name:
+            name = {'w': 'windows', 'ch': 'channels'}.get(unit, None)
+            unit = ''
+        if not name:
+            comment.append(name + value + unit)
+            continue
+        if unit == 'MHz':
+            unit = 1000000
+        try:
+            if unit:
+                value = int(value) * int(unit)
+            else:
+                value = int(value)
+            unit = 0
+        except ValueError:
+            pass
+        settings[name] = (value + unit) if value != '' else True
+    cstr = '/'.join(reversed(comment))
+    if cstr:
+        settings['comment'] = cstr
+    return settings
+
+
+def _flimbox_decode(
     data,
     bins_out,
     times_out,
@@ -3785,12 +4063,12 @@ def _simfcsfbd_decode(
 ):
     """Decode FLIMbox data stream.
 
-    See the documentation of the SimfcsFbd class for parameter descriptions
+    See the documentation of the FlimboxFbd class for parameter descriptions
     and the lfdfiles.pyx file for a faster implementation.
 
     """
     # this implementation is for reference only. Do not use
-    from ._lfdfiles import simfcsfbd_decode  # noqa
+    from ._lfdfiles import flimbox_decode  # noqa
 
     tcc = data & tcc_mask  # cross correlation time
     if tcc_shr:
@@ -3834,17 +4112,17 @@ def _simfcsfbd_decode(
     bins_out[:] = win
 
 
-def _simfcsfbd_histogram(
+def _flimbox_histogram(
     bins, times, frame_markers, units_per_sample, scanner_frame_start, out
 ):
     """Calculate histograms from decoded FLIMbox data and frame markers.
 
-    See the documentation of the SimfcsFbd class for parameter descriptions
-    and the lfdfiles.pyx file for a much faster implementation.
+    See the documentation of the FlimboxFbd class for parameter descriptions
+    and the _lfdfiles.pyx file for a much faster implementation.
 
     """
     # this implementation is for reference only. Do not use
-    from ._lfdfiles import simfcsfbd_histogram  # noqa
+    from ._lfdfiles import flimbox_histogram  # noqa
 
     nframes, nchannels, frame_length, nwindows = out.shape
     for f, (j, k) in enumerate(frame_markers):
@@ -3865,40 +4143,27 @@ def _simfcsfbd_histogram(
 
 
 try:
-    from ._lfdfiles import sflim_decode, simfcsfbd_decode, simfcsfbd_histogram
+    from ._lfdfiles import flimbox_decode, flimbox_histogram, sflim_decode
 except ImportError:
 
-    def simfcsfbd_histogram(*args: Any, **kwargs: Any):
+    def flimbox_histogram(*args: Any, **kwargs: Any):
         """Raise ImportError: No module named '_lfdfiles'."""
-        from ._lfdfiles import simfcsfbd_histogram  # noqa
+        from ._lfdfiles import flimbox_histogram  # noqa
 
-    def simfcsfbd_decode(*args: Any, **kwargs: Any):
+    def flimbox_decode(*args: Any, **kwargs: Any):
         """Raise ImportError: No module named '_lfdfiles'."""
-        from ._lfdfiles import simfcsfbd_decode  # noqa
+        from ._lfdfiles import flimbox_decode  # noqa
 
     def sflim_decode(*args: Any, **kwargs: Any):
         """Raise ``ImportError: No module named '_sflim'``."""
         from ._lfdfiles import sflim_decode  # noqa
 
 
-class SimfcsGpSeries(LfdFileSequence):
-    """SimFCS generalized polarization image series.
-
-    SimFCS GP series contain intensity images from two channels, stored in
-    separate :py:class:`SimfcsInt` files with consecutive names.
-
-    Examples:
-        >>> ims = SimfcsGpSeries('gpint/v*.int')
-        >>> ims.axes
-        'CI'
-        >>> ims = ims.asarray()
-        >>> ims.shape
-        (2, 135, 256, 256)
-
-    """
-
-    _readfunction = SimfcsInt
-    _indexpattern = r'(?P<C>\d)(?P<I>\d+)\.int'
+# deprecated alisases
+SimfcsFbd = FlimboxFbd
+SimfcsFbf = FlimboxFbf
+simfcsfbd_histogram = flimbox_histogram
+simfcsfbd_decode = flimbox_decode
 
 
 class GlobalsLif(LfdFile):
@@ -4288,16 +4553,14 @@ class VistaIfi(LfdFile):
 class VistaIfli(LfdFile):
     """VistaVision fluorescence lifetime image.
 
-    VistaVision IFLI files contain phasor and lifetime images for several
+    VistaVision IFLI files contain phasor images for several
     positions, wavelengths, time points, channels, slices, and frequencies
     from analog or digital frequency domain fluorescence lifetime measurements.
-    After a version dependent header of 1024 bytes, the images are stored as
-    two 9 dimensional arrays of float32 and shape
+    After a version dependent header of 1024 bytes, the image is stored as
+    a 9 dimensional arrays of float32 and shape
     (position, wavelength, time, channel, Z, Y, X, frequency, sample).
     The phasor array has three samples: the average intensity (DC) and the
     real (g) and imaginary (s) parts of the phasor.
-    The lifetime array has two samples, the lifetimes calculated from phase
-    and modulation (apparent single lifetimes).
     Additional metadata may be stored in an associated XML file.
 
     Parameters:
@@ -4482,7 +4745,7 @@ class VistaIfli(LfdFile):
             sizef,
             3,
         )
-        self.dtype = numpy.dtype(numpy.float64)
+        self.dtype = numpy.dtype(numpy.float32)
         self.header = header
         self.offsets = offsets
 
@@ -4493,7 +4756,7 @@ class VistaIfli(LfdFile):
         bits = self.header['ChannelNumbers']
         return tuple(i for i in range(self.shape[3]) if bits & 2**i)
 
-    def phasor(self, *, memmap: bool = False) -> NDArray[Any]:
+    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
         """Return average intensity and phasor coordinates from file.
 
         The returned array is of shape (position, wavelength, time, channel,
@@ -4511,46 +4774,17 @@ class VistaIfli(LfdFile):
                 mode='r',
                 offset=offset,
                 shape=self.shape,
+                **kwargs,
             )
         self._fh.seek(offset)
         phasor = numpy.fromfile(self._fh, '<f4', product(self.shape))
         phasor.shape = self.shape
         return phasor
 
-    def lifetime(self, *, memmap: bool = False) -> NDArray[Any]:
-        """Return apparent single lifetime data from file.
-
-        The returned array is of shape (position, wavelength, time, channel,
-        Z, Y, X, frequency, sample) and type float32.
-        The two samples are the lifetimes calculated from phase and modulation.
-
-        """
-        assert self._fh is not None and self.shape is not None
-        offset = self.offsets['PhasorPixelData'] + product(self.shape) * 3
-        if memmap:
-            return numpy.memmap(  # type: ignore
-                self._fh,
-                dtype='<f4',
-                mode='r',
-                offset=offset,
-                shape=self.shape,
-            )
-        self._fh.seek(offset)
-        shape = self.shape[:-1] + (2,)
-        lifetime = numpy.fromfile(self._fh, '<f4', product(shape))
-        lifetime.shape = shape
-        return lifetime
-
-    def _asarray(
-        self, *, memmap: bool = False, **kwargs: Any
-    ) -> NDArray[numpy.float32]:
-        """Return phasor data from file."""
-        return self.phasor(memmap=memmap)
-
     def _plot(self, figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
-        data = self.phasor()
+        data = self.asarray()
         data[..., 0] /= numpy.max(data[..., 0])
         data = numpy.moveaxis(data, -1, 0)
         data = numpy.moveaxis(data, -1, -3)
@@ -4566,7 +4800,7 @@ class VistaIfli(LfdFile):
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False)
-        data = self.phasor()
+        data = self.asarray()
         data = numpy.moveaxis(data, -2, 0)
         data = numpy.moveaxis(data, -1, 0)
         tif.write(data, **kwargs)
@@ -6227,7 +6461,7 @@ def convert_fbd2b64(
     """
     prints: Any = print if verbose else nullfunc
 
-    with SimfcsFbd(
+    with FlimboxFbd(
         fbdfile,
         pdiv=pdiv,
         laser_frequency=laser_frequency,
