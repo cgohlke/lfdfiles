@@ -1,6 +1,15 @@
 Revisions
 ---------
 
+2023.9.26
+
+- Remove phasor and lifetime methods from VistaIfli (breaking).
+- Rename SimfcsFbd and SimfcsFbf to FlimboxFbd and FlimboxFbf (breaking).
+- Deprecate SimfcsFbd and SimfcsFbf.
+- Support int16 FLIMbox cross correlation phase indices (bins).
+- Add FlimboxFbs class for ISS VistaVision FLIMbox settings.
+- Add decoder for 32-bit, 16 windows, 4 channels FlimboxFbd (untested).
+
 2023.9.16
 
 - Rewrite VistaIfli based on file format specification (breaking).
