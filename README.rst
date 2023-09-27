@@ -8,7 +8,7 @@ to store experimental data and metadata at the
 For example:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
-- FLIMbox FBD, FBF
+- FLIMbox FBD, FBF, FBS.XML
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
@@ -18,7 +18,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.9.16
+:Version: 2023.9.26
 
 Quickstart
 ----------
@@ -48,7 +48,7 @@ This revision was tested with the following requirements and dependencies
 - `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12.0rc
 - `Cython <https://pypi.org/project/cython/>`_ 0.29.36 (build)
 - `NumPy <https://pypi.org/project/numpy/>`_ 1.25.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.8.30 (optional)
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.9.26 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
@@ -59,6 +59,15 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2023.9.26
+
+- Remove phasor and lifetime methods from VistaIfli (breaking).
+- Rename SimfcsFbd and SimfcsFbf to FlimboxFbd and FlimboxFbf (breaking).
+- Deprecate SimfcsFbd and SimfcsFbf.
+- Support int16 FLIMbox cross correlation phase indices (bins).
+- Add FlimboxFbs class for ISS VistaVision FLIMbox settings.
+- Add decoder for 32-bit, 16 windows, 4 channels FlimboxFbd (untested).
 
 2023.9.16
 
