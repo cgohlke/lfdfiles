@@ -109,6 +109,12 @@ ext_modules = [
         ['lfdfiles/_lfdfiles' + ext],
         extra_compile_args=extra_compile_args,
         extra_link_args=extra_link_args,
+        define_macros=[
+            # ('CYTHON_TRACE_NOGIL', '1'),
+            # ('CYTHON_LIMITED_API', '1'),
+            # ('Py_LIMITED_API', '1'),
+            ('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'),
+        ],
     ),
 ]
 
