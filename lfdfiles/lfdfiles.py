@@ -1,6 +1,6 @@
 # lfdfiles.py
 
-# Copyright (c) 2012-2023, Christoph Gohlke
+# Copyright (c) 2012-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,8 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2023.9.26
+:Version: 2024.3.4
+:DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
 ----------
@@ -75,20 +76,24 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.5, 3.12.0rc
-- `Cython <https://pypi.org/project/cython/>`_ 0.29.36 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.25.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2023.9.26 (optional)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.8, 3.12.2
+- `Cython <https://pypi.org/project/cython/>`_ 3.0.8 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.2.12 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.7.3
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.8.3
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2024.3.4
+
+- Fix decoding 32-bit, 16 windows, 4 channels Spartan6 FBD files (#1).
 
 2023.9.26
 
@@ -236,7 +241,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2023.9.26'
+__version__ = '2024.3.4'
 
 __all__ = [
     'LfdFile',
@@ -328,7 +333,7 @@ from tifffile import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
-    from typing import Any, Callable, ClassVar, Literal
+    from typing import Any, Callable, ClassVar, Literal, TypeVar
 
     from numpy.typing import ArrayLike, DTypeLike, NDArray
 
@@ -883,8 +888,6 @@ class LfdFile(metaclass=LfdFileRegistry):
 
 
 if TYPE_CHECKING:
-    from typing import TypeVar
-
     LfdFileType = TypeVar('LfdFileType', bound=LfdFile)
 
 
@@ -1812,9 +1815,9 @@ class SimfcsCyl(LfdFile):
         """Verify file size matches shape."""
         channels, orbits, points_per_orbit = shape
         if channels > 2 or channels < 1:
-            raise ValueError('channels out of range [1..2]')
+            raise ValueError(f'{channels=} out of range [1..2]')
         if points_per_orbit > 256 or points_per_orbit < 1:
-            raise ValueError('points_per_orbit out of range [1..256]')
+            raise ValueError(f'{points_per_orbit=} out of range [1..256]')
         if orbits <= 0:
             orbits = points_per_orbit * channels * 2
             if self._filesize % orbits:
@@ -1944,9 +1947,7 @@ class SimfcsBh(LfdFile):
     acquired from Becker and Hickl(r) TCSPC cards, or converted from other
     data sources.
     The data are stored consecutively as 256 bins of 256x256 float32 images.
-    SimFCS BHZ files are zipped B&H files: a Zip archive containing a single
-    B&H file.
-    BHZ files are occasionally used to store consecutive 256x256 float32
+    B&H files are occasionally used to store consecutive 256x256 float32
     images, for example, volume data.
 
     Parameters:
@@ -2644,6 +2645,9 @@ class FlimboxFbd(LfdFile):
     fbs: dict[str, Any] | None
     """FLIMbox settings from FBS.XML file, if any."""
 
+    decoder: str | None
+    """Decoder settings function."""
+
     code: str
     """Four-character string from file name, if any."""
 
@@ -2692,6 +2696,7 @@ class FlimboxFbd(LfdFile):
     _data_offset: int
 
     _attributes = (
+        'decoder',
         'frame_size',
         'windows',
         'channels',
@@ -2968,10 +2973,12 @@ class FlimboxFbd(LfdFile):
         ):
             t = self.fbf['time'][:-3]
             decoder += f't{t}'
+        self.decoder = decoder
         try:
-            return getattr(self, decoder)()
+            settings = getattr(self, decoder)()
         except Exception as exc:
             raise ValueError(f'Decoder{decoder} not implemented') from exc
+        return settings
 
     @staticmethod
     def _b4w16c4t10() -> dict[str, NDArray[numpy.int16] | int]:
@@ -2979,8 +2986,8 @@ class FlimboxFbd(LfdFile):
         # with line markers
         # 0b00000000000000000000000011111111 cross correlation phase
         # 0b00000000000000000000001111111111 cross correlation time  # 10 bit
-        # 0b00000000000000000000010000000000 start of frame marker
-        # 0b00000000000000000000100000000000 start of line marker
+        # 0b00000000000000000000010000000000 start of line marker
+        # 0b00000000000000000000100000000000 start of frame marker
         # 0b00000000000000000001000000000000 ch0 photon
         # 0b00000000000000011110000000000000 ch0 window
         # 0b00000000000000100000000000000000 ch1 photon
@@ -2989,12 +2996,7 @@ class FlimboxFbd(LfdFile):
         # 0b00000111100000000000000000000000 ch2 window
         # 0b00001000000000000000000000000000 ch3 photon
         # 0b11110000000000000000000000000000 ch3 window
-        log_warning(
-            'FlimboxFbd: b4w16c4 decoder not tested. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-        table = numpy.zeros((4, 2**20), numpy.int16)
-        table -= 1
+        table = numpy.full((4, 2**20), -1, numpy.int16)
         for i in range(2**20):
             if i & 0b1:
                 table[0, i] = (i & 0b11110) >> 1
@@ -3010,13 +3012,13 @@ class FlimboxFbd(LfdFile):
             'tcc_shr': 0,
             'pcc_mask': 0xFF,
             'pcc_shr': 0,
-            'marker_mask': 0x400,
-            'marker_shr': 10,
-            # 'line_mask': 0x800,
-            # 'line_shr': 11,
+            # 'line_mask': 0x400,
+            # 'line_shr': 10,
+            'marker_mask': 0x800,
+            'marker_shr': 11,
             'win_mask': 0xFFFFF000,
             'win_shr': 12,
-            # 'pdiv': 1
+            'swap_words': True,
         }
 
     @staticmethod
@@ -3055,8 +3057,7 @@ class FlimboxFbd(LfdFile):
         # 0b00000000111111110000000000000000 cross correlation phase
         # 0b00011111111111110000000000000000 cross correlation time
         # 0b01000000000000000000000000000000 start of frame marker
-        table = numpy.zeros((4, 2**16), numpy.int16)
-        table -= 1
+        table = numpy.full((4, 2**16), -1, numpy.int16)
         for i in range(2**16):
             if i & 0b1:
                 table[0, i] = (i & 0b1110) >> 1
@@ -3076,6 +3077,7 @@ class FlimboxFbd(LfdFile):
             'marker_shr': 30,
             'win_mask': 0xFFFF,
             'win_shr': 0,
+            # 'swap_words': True,  # ?
         }
 
     @staticmethod
@@ -3106,8 +3108,7 @@ class FlimboxFbd(LfdFile):
     def _b2w8c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 8 windows, 2 channels
         # TODO: this does not correctly decode data acquired with ISS firmware
-        table = numpy.zeros((2, 81), numpy.int16)
-        table -= 1
+        table = numpy.full((2, 81), -1, numpy.int16)
         table[0, 1:9] = range(8)
         table[1, 9:17] = range(8)
         table[:, 17:] = numpy.mgrid[0:8, 0:8].reshape(2, -1)[::-1, :]
@@ -3130,8 +3131,7 @@ class FlimboxFbd(LfdFile):
             'FlimboxFbd: b2w8c4 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
-        table = numpy.zeros((4, 128), numpy.int16)
-        table -= 1
+        table = numpy.full((4, 128), -1, numpy.int16)
         for i in range(128):
             win = i & 0b0000111
             ch0 = (i & 0b0001000) >> 3
@@ -3167,8 +3167,7 @@ class FlimboxFbd(LfdFile):
             'FlimboxFbd: b2w16c1 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
-        table = numpy.zeros((1, 32), numpy.int16)
-        table -= 1
+        table = numpy.full((1, 32), -1, numpy.int16)
         for i in range(32):
             win = (i & 0b11110) >> 1
             ch0 = i & 0b00001
@@ -3193,8 +3192,7 @@ class FlimboxFbd(LfdFile):
             'FlimboxFbd: b2w16c2 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
-        table = numpy.zeros((2, 64), numpy.int16)
-        table -= 1
+        table = numpy.full((2, 64), -1, numpy.int16)
         for i in range(64):
             win = (i & 0b111100) >> 2
             ch0 = (i & 0b000010) >> 1
@@ -3254,6 +3252,7 @@ class FlimboxFbd(LfdFile):
         **kwargs: Any,
     ) -> None:
         """Initialize instance from file name code or file header."""
+        self.decoder = None
         self.fbf = None
         self.fbs = None
         self.header = None
@@ -3358,13 +3357,21 @@ class FlimboxFbd(LfdFile):
                 self.scanner_frame_start = 0
             if self.pixel_dwell_time < 0:
                 self.pixel_dwell_time = scn['PixelDwellTime']['value']
+                if (
+                    'Unit' in scn['PixelDwellTime']
+                    and 'milli' in scn['PixelDwellTime']['Unit'].lower()
+                ):
+                    self.pixel_dwell_time *= 1000
             if self.frame_size < 0:
                 self.frame_size = scn['XPixels']
             self.fbs = fbs.asdict()
         self._fh.seek(0)
-        if self._fh.read(32).decode('cp1252').isprintable():
-            # header detected, assume encoded data starts at 33K
-            self._data_offset = 33792
+        try:
+            if self._fh.read(32).decode('cp1252').isprintable():
+                # header detected, assume encoded data starts at 33K
+                self._data_offset = 33792
+        except UnicodeDecodeError:
+            pass
         self._fh.seek(0)
         return True
 
@@ -3707,8 +3714,8 @@ class FlimboxFbd(LfdFile):
                 if c == frame_cluster
             ]
             msg = [
-                f'no frames detected with default settings.'
-                f'Using square shape and correction factor '
+                'no frames detected with default settings.'
+                'Using square shape and correction factor '
                 f'{self.laser_factor:.5f}.'
             ]
             if len(laser_factors) > 1:
@@ -3849,9 +3856,11 @@ class FlimboxFbd(LfdFile):
             indent(
                 'decoder_settings:',
                 *(
-                    f'{k}: {v:#x}'
-                    if 'mask' in k
-                    else f'{k}: {v}'[:64].splitlines()[0]
+                    (
+                        f'{k}: {v:#x}'
+                        if 'mask' in k
+                        else f'{k}: {v}'[:64].splitlines()[0]
+                    )
                     for k, v in self.decoder_settings.items()
                 ),
             )
@@ -4809,14 +4818,17 @@ class VistaIfli(LfdFile):
         """Return additional information about file."""
         return indent(
             'header:',
-            *tuple(
+            *(
                 f'{name}: {value}'
                 for name, value in self.header.items()
                 if name != 'Comments'
             ),
-            f'Comments:\n{self.header["Comments"]}'
-            if 'Comments' in self.header
-            else '',
+            *(f'{name}Offset: {value}' for name, value in self.offsets.items()),
+            (
+                f'Comments:\n{self.header["Comments"]}'
+                if 'Comments' in self.header
+                else ''
+            ),
         )
 
 
@@ -5387,10 +5399,8 @@ class BioradPic(LfdFile):
 
     def _str(self) -> str | None:
         """Return properties as string."""
-        return (
-            f'spacing: {self.spacing}\n'
-            f'origin: {self.origin}\n'
-            + indent('header:', format_dict(self.header, prefix=''))
+        return f'spacing: {self.spacing}\norigin: {self.origin}\n' + indent(
+            'header:', format_dict(self.header, prefix='')
         )
 
 
@@ -5929,7 +5939,7 @@ def vaa3draw_write(
     data: ArrayLike,
     /,
     *,
-    byteorder: Literal['>'] | Literal['<'] | None = None,
+    byteorder: Literal['>', '<'] | None = None,
     twobytes: bool = False,
 ) -> None:
     """Write data to Vaa3D RAW binary file(s).
@@ -6190,7 +6200,7 @@ class OifFile(LfdFile):
         start = self._fh.read(8)
         if (
             start != b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
-            and start[:4] != b'\xFF\xFE\x5B\x00'
+            and start[:4] != b'\xff\xfe\x5b\x00'
         ):
             raise LfdFileError(self)
 
@@ -6608,7 +6618,7 @@ def read_record(
     fh,
     /,
     *,
-    byteorder: Literal['>'] | Literal['<'] = '<',
+    byteorder: Literal['>', '<'] = '<',
 ) -> int:
     """Read record from file and add fields to meta."""
     size = 0
