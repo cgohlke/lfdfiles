@@ -1,6 +1,10 @@
 Revisions
 ---------
 
+2024.3.4
+
+- Fix decoding 32-bit, 16 windows, 4 channels Spartan6 FBD files (#1).
+
 2023.9.26
 
 - Remove phasor and lifetime methods from VistaIfli (breaking).
