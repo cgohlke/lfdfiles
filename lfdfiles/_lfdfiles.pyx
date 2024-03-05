@@ -6,7 +6,7 @@
 # cython: cdivision = True
 # cython: nonecheck = False
 
-# Copyright (c) 2012-2023, Christoph Gohlke
+# Copyright (c) 2012-2024, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 
 """
 
-__version__ = '2023.x.x'
+__version__ = '2024.3.4'
 
 
 from cython.parallel import parallel, prange
@@ -84,7 +84,8 @@ def flimbox_decode(
     data_t marker_mask,
     uint32_t marker_shr,
     data_t win_mask,
-    uint32_t win_shr
+    uint32_t win_shr,
+    bint swap_words = False,
     ):
     """Decode FLIMbox data stream.
 
@@ -129,6 +130,8 @@ def flimbox_decode(
             Binary mask to extract index into `decoder_table` from data word.
         win_shr (int):
             Number of bits to right shift masked index into `decoder_table`.
+        swap_words (bool):
+            Swap words of uint32 data.
 
     """
     cdef:
@@ -149,11 +152,15 @@ def flimbox_decode(
         raise ValueError('shape mismatch between bins and time')
     if pmax <= 1 or pmax_win < 1 or pdiv < 1:
         raise ValueError('invalid parameters')
+    if swap_words and data.itemsize != 4:
+        raise ValueError(f'cannot swap words of {data.itemsize=}')
 
     # calculate cross correlation phase index
     for c in prange(nchannel, nogil=True):
         for i in range(datasize):
             d = data[i]
+            if swap_words:
+                d = (d >> 16) | (d << 16)
             pcc = <int>((d & pcc_mask) >> pcc_shr)
             win = <int>((d & win_mask) >> win_shr)
             if win < maxwindex:
@@ -170,11 +177,16 @@ def flimbox_decode(
     # record up-markers and absolute time
     tcc_max = (tcc_mask >> tcc_shr) + 1
     j = 0
-    m0 = <int>(data[0] & marker_mask)
-    t0 = (data[0] & tcc_mask) >> tcc_shr
+    d = data[0]
+    if swap_words:
+        d = (d >> 16) | (d << 16)
+    m0 = <int>(d & marker_mask)
+    t0 = (d & tcc_mask) >> tcc_shr
     times_out[0] = 0
     for i in range(1, datasize):
         d = data[i]
+        if swap_words:
+            d = (d >> 16) | (d << 16)
         # detect up-markers
         if j < maxmarker:
             m1 = <int>(d & marker_mask)
@@ -361,7 +373,7 @@ def sflim_decode(
                 if ret < 0:
                     with gil:
                         raise ValueError(
-                            f'no start of frame found for address {address}'
+                            f'no start of frame found for {address=}'
                         )
     finally:
         openmp.omp_destroy_lock(&lock)
@@ -554,9 +566,7 @@ def sflim_decode_photons(
                 maxframes,
             )
             if ret < 0:
-                raise ValueError(
-                    f'no start of frame found for address {address}'
-                )
+                raise ValueError(f'no start of frame found for {address=}')
             np += ret
             if np >= maxphotons:
                 break
