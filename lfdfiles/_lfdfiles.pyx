@@ -86,7 +86,7 @@ def flimbox_decode(
     data_t win_mask,
     uint32_t win_shr,
     bint swap_words = False,
-    ):
+):
     """Decode FLIMbox data stream.
 
     Parameters:
@@ -172,7 +172,7 @@ def flimbox_decode(
                 else:
                     bins_out[c, i] = -1  # no event
             else:
-               bins_out[c, i] = -2  # should never happen
+                bins_out[c, i] = -2  # should never happen
 
     # record up-markers and absolute time
     tcc_max = (tcc_mask >> tcc_shr) + 1
@@ -213,7 +213,7 @@ def flimbox_histogram(
     double units_per_sample,
     double scanner_frame_start,
     uint16_t[:, :, :, ::1] hist_out
-    ):
+):
     """Calculate histograms from decoded FLIMbox data and frame markers.
 
     Parameters:
@@ -240,7 +240,7 @@ def flimbox_histogram(
         ssize_t nframes = hist_out.shape[0]
         ssize_t nchannels = hist_out.shape[1]
         ssize_t framelen = hist_out.shape[2]
-        ssize_t nwindows = hist_out.shape[3]
+        # ssize_t nwindows = hist_out.shape[3]
         ssize_t i, j, k, f, c, idx
         times_t t0
         bins_t w
