@@ -1,6 +1,10 @@
 Revisions
 ---------
 
+2024.4.24
+
+- Support NumPy 2.
+
 2024.3.4
 
 - Fix decoding 32-bit, 16 windows, 4 channels Spartan6 FBD files (#1).
