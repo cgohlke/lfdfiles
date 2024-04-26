@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.3.4
+:Version: 2024.4.24
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,24 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.8, 3.12.2
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.8 (build)
+- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
+- `Cython <https://pypi.org/project/cython/>`_ 3.0.10 (build)
 - `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.2.12 (optional)
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.4.24 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.8.3
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.8.4
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2024.4.24
+
+- Support NumPy 2.
 
 2024.3.4
 
@@ -241,7 +245,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2024.3.4'
+__version__ = '2024.4.24'
 
 __all__ = [
     'LfdFile',
@@ -332,8 +336,8 @@ from tifffile import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
-    from typing import Any, Callable, ClassVar, Literal, TypeVar
+    from collections.abc import Callable, Iterator, Sequence
+    from typing import Any, ClassVar, Literal, TypeVar
 
     from numpy.typing import ArrayLike, DTypeLike, NDArray
 
@@ -837,9 +841,8 @@ class LfdFile(metaclass=LfdFileRegistry):
         if re.search(self._filepattern, self._filename, re.IGNORECASE) is None:
             raise LfdFileError(
                 self,
-                ".\n    File name '{}' does not match '{}')".format(
-                    self._filename, self._filepattern
-                ),
+                f'.\n    File name {self._filename!r}'
+                f' does not match {self._filepattern!r}',
             )
 
     def _decompress_header(
@@ -2628,7 +2631,7 @@ class FlimboxFbd(LfdFile):
         >>> print(bins[0, :2], times[:2], markers)
         [53 51] [ 0 42] [ 44097 124815]
         >>> hist = [numpy.bincount(b[b>=0]) for b in bins]
-        >>> numpy.argmax(hist[0])
+        >>> int(numpy.argmax(hist[0]))
         53
 
     """
@@ -4199,9 +4202,9 @@ class GlobalsLif(LfdFile):
     _record_t = numpy.dtype(
         [
             ('_title_len', 'u1'),
-            ('title', 'a80'),
+            ('title', 'S80'),
             ('number', 'i2'),
-            ('frequency', [('_len', 'u1'), ('str', 'a6')], 25),
+            ('frequency', [('_len', 'u1'), ('str', 'S6')], 25),
             ('phase', 'i2', 25),
             ('modulation', 'i2', 25),
             ('deltap', 'i2', 25),
@@ -4487,7 +4490,7 @@ class VistaIfi(LfdFile):
     _header_t = numpy.dtype(
         [
             # undocumented file header
-            ('signature', 'a10'),  # 'VISTAIMAGE'
+            ('signature', 'S10'),  # 'VISTAIMAGE'
             ('version', 'u2'),
             ('channel_bits', 'u2'),
             ('dimensions', 'u2', 3),  # XYZ
@@ -4823,7 +4826,10 @@ class VistaIfli(LfdFile):
                 for name, value in self.header.items()
                 if name != 'Comments'
             ),
-            *(f'{name}Offset: {value}' for name, value in self.offsets.items()),
+            *(
+                f'{name}Offset: {value}'
+                for name, value in self.offsets.items()
+            ),
             (
                 f'Comments:\n{self.header["Comments"]}'
                 if 'Comments' in self.header
@@ -4846,11 +4852,11 @@ class FlimfastFlif(LfdFile):
     Examples:
         >>> f = FlimfastFlif('flimfast.flif')
         >>> data = f.asarray()
-        >>> f.header.frequency
-        80.652
-        >>> f.records['phase'][31]
+        >>> float(f.header.frequency)
+        80.652...
+        >>> float(f.records['phase'][31])
         348.75
-        >>> data[31, 219, 299]
+        >>> int(data[31, 219, 299])
         366
         >>> f.totiff('_flimfast.flif.tif')
         >>> f.close()
@@ -4870,10 +4876,10 @@ class FlimfastFlif(LfdFile):
 
     _header_t = numpy.dtype(
         [
-            ('magic', 'a8'),  # '\211FLF\r\n0\n'
-            ('creator', 'a120'),
-            ('date', 'a32'),
-            ('comments', 'a351'),
+            ('magic', 'S8'),  # '\211FLF\r\n0\n'
+            ('creator', 'S120'),
+            ('date', 'S32'),
+            ('comments', 'S351'),
             ('_', 'u1'),
             ('fileprec', '<u2'),
             ('records', '<u2'),
