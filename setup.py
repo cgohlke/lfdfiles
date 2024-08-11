@@ -161,9 +161,9 @@ setup(
             'czifile',
             'oiffile',
             'netpbmfile',
-        ]
+        ],
+        'test': ['pytest'],
     },
-    tests_require=['pytest'],
     packages=['lfdfiles'],
     package_data={'lfdfiles': ['py.typed']},
     entry_points={
@@ -184,9 +184,9 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
     ],
 )
