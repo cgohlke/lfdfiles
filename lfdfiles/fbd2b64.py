@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # lfdfiles/fbd2b64.py
+# mypy: allow-untyped-defs, allow-untyped-calls
 
 """Command line script to convert FLIMbox data file to SimFCS B64 files.
 
