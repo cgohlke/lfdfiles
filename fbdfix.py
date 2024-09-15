@@ -8,9 +8,8 @@ Usage: python fbdfix.py directory_or_file_name
 
 import os
 
-import numpy
-
 import lfdfiles
+import numpy
 
 
 def fbdfix(
@@ -109,3 +108,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# mypy: allow-untyped-defs, allow-untyped-calls
