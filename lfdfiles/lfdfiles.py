@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.5.24
+:Version: 2024.9.15
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.9.13, 3.10.11, 3.11.9, 3.12.3
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.10 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 1.26.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.5.22 (optional)
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.5, 3.13.0rc2 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.0.11 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.1
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.8.30 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2023.8.30 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2023.8.30 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.8.4
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2024.5.24 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2024.5.24 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.9.2
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2024.9.15
+
+- Improve typing.
+- Deprecate Python 3.9, support Python 3.13.
 
 2024.5.24
 
@@ -212,7 +217,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2024.5.24'
+__version__ = '2024.9.15'
 
 __all__ = [
     'LfdFile',
@@ -286,7 +291,7 @@ import warnings
 import zipfile
 import zlib
 from functools import cached_property
-from typing import TYPE_CHECKING, BinaryIO
+from typing import IO, TYPE_CHECKING
 
 import numpy
 import tifffile
@@ -304,13 +309,15 @@ from tifffile import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
+    from types import ModuleType
     from typing import Any, ClassVar, Literal, TypeVar
 
+    from matplotlib.figure import Figure
     from numpy.typing import ArrayLike, DTypeLike, NDArray
 
 # delay import optional modules
-pyplot = None
-cycler = None
+pyplot: ModuleType | None = None
+cycler: ModuleType | None = None
 
 
 def import_pyplot(fail: bool = True, /) -> bool:
@@ -358,11 +365,13 @@ class LfdFileRegistry(type):
     classes: list[type[LfdFile]] = []
     """Registered LfdFile classes."""
 
-    def __new__(mcs, name, bases, dct, /) -> LfdFileRegistry:
+    def __new__(
+        mcs: Any, name: str, bases: tuple[type, ...], dct: dict[str, Any], /
+    ) -> LfdFileRegistry:
         cls = type.__new__(mcs, name, bases, dct)
         if cls.__name__[:7] != 'LfdFile':
-            LfdFileRegistry.classes.append(cls)  # type: ignore
-        return cls
+            LfdFileRegistry.classes.append(cls)
+        return cls  # type: ignore[no-any-return]
 
     @staticmethod
     def sort() -> None:
@@ -508,7 +517,7 @@ class LfdFile(metaclass=LfdFileRegistry):
                     )
                 continue
             else:
-                return super().__new__(lfdfile)
+                return super().__new__(lfdfile)  # type: ignore[no-any-return]
         raise LfdFileError(
             'failed to read file using any LfdFile class.\n'
             + '\n'.join(exceptions)
@@ -589,11 +598,11 @@ class LfdFile(metaclass=LfdFileRegistry):
             try:
                 self._init(**kwargs)
             except Exception:
-                if self._fh:
+                if self._fh is not None:
                     self._fh.close()
                     self._fh = None
                 raise
-            if self._fh:
+            if self._fh is not None:
                 self._pos = self._fh.tell()
 
     def __repr__(self) -> str:
@@ -620,7 +629,7 @@ class LfdFile(metaclass=LfdFileRegistry):
     def __enter__(self: LfdFileType) -> LfdFileType:
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.close()
 
     def close(self) -> None:
@@ -731,7 +740,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         """
         raise NotImplementedError
 
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any):
+    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image and metadata to TIFF file.
 
         :meta public:
@@ -739,7 +748,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         """
         raise NotImplementedError
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display data in matplotlib figure.
 
         :meta public:
@@ -750,8 +759,8 @@ class LfdFile(metaclass=LfdFileRegistry):
         pyplot.subplots_adjust(bottom=0.07, top=0.93)
         try:
             data = self.asarray()
-            if isinstance(data, tuple):
-                data = data[0]
+            if isinstance(data, tuple):  # type: ignore[unreachable]
+                data = data[0]  # type: ignore[unreachable]
             ndim = data.ndim
         except Exception as exc:
             warnings.warn(str(exc))
@@ -919,7 +928,7 @@ class LfdFileSequence(FileSequence):
         *,
         imread: Callable[..., NDArray[Any]] | type[LfdFile] | None = None,
         pattern: str | None = None,
-        container=None,
+        container: str | os.PathLike[Any] | None = None,
         sort: Callable[..., Any] | bool | None = None,
     ) -> None:
         if pattern is None:
@@ -931,17 +940,19 @@ class LfdFileSequence(FileSequence):
 
         imread_func: Callable[..., NDArray[Any]]
 
-        if issubclass(imread, LfdFile):  # type: ignore
+        if isinstance(imread, type) and issubclass(imread, LfdFile):
 
             def imread_func(
-                fname, /, lfdfile=imread, **kwargs: Any
+                fname: str | os.PathLike[Any],
+                /,
+                lfdfile: type[LfdFile] = imread,  # type: ignore[assignment]
+                **kwargs: Any,
             ) -> NDArray[Any]:
                 with lfdfile(fname) as lfdf:
                     return lfdf.asarray(**kwargs)
 
         else:
-            imread_func = imread  # type: ignore
-
+            imread_func = imread  # type: ignore[assignment]
         super().__init__(
             imread_func, files, container=container, sort=sort, pattern=pattern
         )
@@ -1020,7 +1031,7 @@ class RawPal(LfdFile):
             data[:, 3] = 255  # fix transparency
         return data
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape(1, 256, -1)
         ax = figure.add_subplot(1, 1, 1)
@@ -1099,7 +1110,7 @@ class SimfcsVpl(LfdFile):
             return data.reshape(256, 3)
         return data.reshape(3, 256).T
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape(1, 256, -1)
         ax = figure.add_subplot(1, 1, 1)
@@ -1171,7 +1182,7 @@ class SimfcsVpp(LfdFile):
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
         # TODO: do not assign to class variable
-        self._figureargs = {  # type: ignore
+        self._figureargs = {  # type: ignore[misc]
             'figsize': (6, len(self.names) / 6)
         }
 
@@ -1200,7 +1211,7 @@ class SimfcsVpp(LfdFile):
             data[:, 3] = 255  # fix transparency
         return data
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display all palettes stored in file."""
         figure.subplots_adjust(top=0.96, bottom=0.02, left=0.18, right=0.95)
         for i, name in enumerate(self.names):
@@ -1347,7 +1358,7 @@ class SimfcsJrn(LfdFile):
     )
     _skip = re.compile(r'\s*\(.*\)')  # ignore parenthesis in values
 
-    # _lower: Callable[[str], str]  # https://github.com/python/mypy/issues/708
+    _lower: bool
     _records: list[dict[str, str]]
 
     def _init(self, *, lower: bool = False, **kwargs: Any) -> None:
@@ -1360,8 +1371,8 @@ class SimfcsJrn(LfdFile):
         self._fsize = len(firstline) + len(content)
         if not firstline.startswith('***'):
             content = firstline + '\n' + content
-        lower_ = (lambda x: x.lower()) if lower else (lambda x: x)
-        self._lower = lower_  # type: ignore
+        lower = bool(lower)
+        self._lower = lower
         self._records = []
         for record in content.split('*' * 80):
             recdict = {}
@@ -1370,17 +1381,21 @@ class SimfcsJrn(LfdFile):
                 record, comments = record
             else:
                 record, comments = record[0], ''
-            recdict[lower_('COMMENTS')] = comments.strip('* :;=\n\r\t')
+            recdict['comments' if lower else 'COMMENTS'] = comments.strip(
+                '* :;=\n\r\t'
+            )
             record = re.split(r'[*]{5}([\w\s]+)[*]{5}', record)
             for key, value in zip(record[1::2], record[2::2]):
                 newdict: dict[str, Any] = {}
-                key = lower_(key.strip('* :;=\n\r\t'))
+                key = key.strip('* :;=\n\r\t')
+                if lower:
+                    key = key.lower()
                 value = self._parse_journal(
-                    value, self._keys, result=newdict, lower=lower_
+                    value, self._keys, result=newdict, lower=lower
                 )
                 recdict[key] = newdict
             self._parse_journal(
-                record[0], self._keys, result=recdict, lower=lower_
+                record[0], self._keys, result=recdict, lower=lower
             )
             self._records.append(recdict)
         self.close()
@@ -1397,8 +1412,8 @@ class SimfcsJrn(LfdFile):
     def _parse_journal(
         journal: str,
         repattern: re.Pattern[str],
-        result: dict[str, Any],
-        lower: Callable[[str], str],
+        result: dict[str, Any] | None,
+        lower: bool,
     ) -> dict[str, Any]:
         """Return dictionary of keys and values in journal string."""
         if result is None:
@@ -1407,13 +1422,13 @@ class SimfcsJrn(LfdFile):
         keyval = re.split(repattern, journal, maxsplit=0)
         keyval = list(s.strip('* :;=\n\r\t') for s in keyval)
         val = [astype(re.sub(SimfcsJrn._skip, '', v)) for v in keyval[2:-1:2]]
-        key = [lower(k) for k in keyval[1:-1:2]]
+        key = [k.lower() if lower else k for k in keyval[1:-1:2]]
         result.update(zip(key, val))
         return result
 
     def _str(self) -> str | None:
         """Return string with information about file."""
-        comments = self._lower('COMMENTS')
+        comments = 'comments' if self._lower else 'COMMENTS'
         return '\n'.join(
             indent(
                 f'Record {i}',
@@ -1635,7 +1650,7 @@ class SimfcsIntPhsMod(LfdFile):
         update_kwargs(kwargs, contiguous=False, metadata=None)
         tif.write(self.asarray(), **kwargs)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
         update_kwargs(kwargs, cmap='viridis')
@@ -1829,7 +1844,7 @@ class SimfcsCyl(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
         update_kwargs(kwargs, cmap='viridis', vmin=0)
@@ -1906,7 +1921,7 @@ class SimfcsRef(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
         update_kwargs(kwargs, cmap='viridis')
@@ -2019,7 +2034,7 @@ class SimfcsBhz(SimfcsBh):
 
     _filepattern = r'.*\.(bhz)$'
 
-    _fh: BinaryIO
+    _fh: IO[bytes]
 
     def _init(self, **kwargs: Any) -> None:
         """Verify Zip file contains file with size multiple of 262144."""
@@ -2658,7 +2673,7 @@ class FlimboxFbd(LfdFile):
     _filepattern = r'.*\.fbd$'
     _figureargs = {'figsize': (6, 5)}
 
-    header: numpy.recarray | None
+    header: numpy.recarray[Any, Any] | None
     """FLIMbox file header, if any."""
 
     fbf: dict[str, Any] | None
@@ -3000,7 +3015,7 @@ class FlimboxFbd(LfdFile):
             settings = getattr(self, decoder)()
         except Exception as exc:
             raise ValueError(f'Decoder{decoder} not implemented') from exc
-        return settings
+        return settings  # type: ignore[no-any-return]
 
     @staticmethod
     def _b4w16c4t10() -> dict[str, NDArray[numpy.int16] | int]:
@@ -3238,7 +3253,7 @@ class FlimboxFbd(LfdFile):
         }
 
     @staticmethod
-    def _b2w32c2():
+    def _b2w32c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 32 windows, 2 channels
         # TODO
         raise NotImplementedError(
@@ -3247,7 +3262,7 @@ class FlimboxFbd(LfdFile):
         )
 
     @staticmethod
-    def _b2w64c1():
+    def _b2w64c1() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 64 windows, 1 channel
         # TODO
         raise NotImplementedError(
@@ -3397,7 +3412,7 @@ class FlimboxFbd(LfdFile):
         self._fh.seek(0)
         return True
 
-    def _from_code(self):
+    def _from_code(self) -> None:
         """Initialize instance from file name code."""
         code = self.code
         if self.frame_size < 0:
@@ -3550,10 +3565,10 @@ class FlimboxFbd(LfdFile):
         self._data_offset = 65536  # start of encoded data; contains 2 headers
 
     @property
-    def pmax(self):
+    def pmax(self) -> int:
         """Number of entries in cross correlation phase histogram."""
         d = self.decoder_settings
-        return ((d['pcc_mask'] >> d['pcc_shr']) + 1) // self.harmonics
+        return int((d['pcc_mask'] >> d['pcc_shr']) + 1) // self.harmonics
 
     @property
     def scanner_line_add(self) -> int:
@@ -3563,7 +3578,7 @@ class FlimboxFbd(LfdFile):
     @property
     def units_per_sample(self) -> float:
         """Number of FLIMbox units per scanner sample."""
-        return (
+        return float(
             (self.pixel_dwell_time * 1e-6)
             * (self.pmax / (self.pmax - 1))
             * (self.laser_frequency * self.laser_factor)
@@ -3645,7 +3660,7 @@ class FlimboxFbd(LfdFile):
                 f'number of markers exceeded buffer size {max_markers}'
             )
 
-        return bins_out, times_out, markers_out
+        return bins_out, times_out, markers_out  # type: ignore[return-value]
 
     def frames(
         self,
@@ -3837,7 +3852,7 @@ class FlimboxFbd(LfdFile):
         """
         return self.decode(data=None, **kwargs)[0]
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot lifetime histogram for all channels."""
         assert pyplot is not None
         assert self.pmax is not None
@@ -3846,7 +3861,7 @@ class FlimboxFbd(LfdFile):
         ax.set_title(self._filename)
         ax.set_xlabel('Bin')
         ax.set_ylabel('Counts')
-        ax.set_xlim([0, self.pmax // self.pdiv - 1])
+        ax.set_xlim((0, self.pmax // self.pdiv - 1))
         bins, times, markers = self.decode()
         for ch, bins_channel in enumerate(bins):
             histogram = numpy.bincount(bins_channel[bins_channel >= 0])
@@ -3954,7 +3969,7 @@ class FlimboxFbs(LfdFile):
     def __len__(self) -> int:
         return len(self._settings)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self._settings)
 
 
@@ -4010,7 +4025,7 @@ class FlimboxFbf(LfdFile):
     def firmware(self) -> bytes:
         """Return firmware as binary string."""
         assert self._fh is not None
-        return self._fh.read()
+        return self._fh.read()  # type: ignore[no-any-return]
 
     def asdict(self) -> dict[str, Any]:
         """Return settings as dict."""
@@ -4037,7 +4052,7 @@ class FlimboxFbf(LfdFile):
     def __len__(self) -> int:
         return len(self._settings)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self._settings)
 
 
@@ -4077,23 +4092,23 @@ def _flimboxfbf_parse(header: str, /) -> dict[str, Any]:
 
 
 def _flimbox_decode(
-    data,
-    bins_out,
-    times_out,
-    markers_out,
-    windows,
-    pdiv,
-    harmonics,
-    decoder_table,
-    tcc_mask,
-    tcc_shr,
-    pcc_mask,
-    pcc_shr,
-    marker_mask,
-    marker_shr,
-    win_mask,
-    win_shr,
-):
+    data: Any,
+    bins_out: Any,
+    times_out: Any,
+    markers_out: Any,
+    windows: Any,
+    pdiv: Any,
+    harmonics: Any,
+    decoder_table: Any,
+    tcc_mask: Any,
+    tcc_shr: Any,
+    pcc_mask: Any,
+    pcc_shr: Any,
+    marker_mask: Any,
+    marker_shr: Any,
+    win_mask: Any,
+    win_shr: Any,
+) -> None:
     """Decode FLIMbox data stream.
 
     See the documentation of the FlimboxFbd class for parameter descriptions
@@ -4146,8 +4161,13 @@ def _flimbox_decode(
 
 
 def _flimbox_histogram(
-    bins, times, frame_markers, units_per_sample, scanner_frame_start, out
-):
+    bins: Any,
+    times: Any,
+    frame_markers: Any,
+    units_per_sample: Any,
+    scanner_frame_start: Any,
+    out: Any,
+) -> None:
     """Calculate histograms from decoded FLIMbox data and frame markers.
 
     See the documentation of the FlimboxFbd class for parameter descriptions
@@ -4179,15 +4199,15 @@ try:
     from ._lfdfiles import flimbox_decode, flimbox_histogram, sflim_decode
 except ImportError:
 
-    def flimbox_histogram(*args: Any, **kwargs: Any):
+    def flimbox_histogram(*args: Any, **kwargs: Any) -> None:
         """Raise ImportError: No module named '_lfdfiles'."""
         from ._lfdfiles import flimbox_histogram  # noqa
 
-    def flimbox_decode(*args: Any, **kwargs: Any):
+    def flimbox_decode(*args: Any, **kwargs: Any) -> None:
         """Raise ImportError: No module named '_lfdfiles'."""
         from ._lfdfiles import flimbox_decode  # noqa
 
-    def sflim_decode(*args: Any, **kwargs: Any):
+    def sflim_decode(*args: Any, **kwargs: Any) -> None:
         """Raise ``ImportError: No module named '_sflim'``."""
         from ._lfdfiles import sflim_decode  # noqa
 
@@ -4237,7 +4257,7 @@ class GlobalsLif(LfdFile):
         ]
     )
 
-    class Record(dict):
+    class Record(dict[str, object]):
         """Record in GlobalsLif files."""
 
         def asarray(self) -> NDArray[Any]:
@@ -4295,7 +4315,7 @@ class GlobalsLif(LfdFile):
             return self._records[key].asarray()
         return numpy.empty((5, 0), numpy.float64)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot all phase and modulation vs log of frequency."""
         assert pyplot is not None and cycler is not None
         maxplots = 50
@@ -4442,7 +4462,7 @@ class GlobalsAscii(LfdFile):
         """Return array data as NumPy array."""
         return self.__data.copy()
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot phase and modulation vs log of frequency."""
         assert pyplot is not None
         if self['experiment'] != 'LIFETIME':
@@ -4508,7 +4528,7 @@ class VistaIfi(LfdFile):
 
     _filepattern = r'.*\.ifi$'
 
-    header: numpy.recarray
+    header: numpy.recarray[Any, Any]
     """File header."""
 
     _header_t = numpy.dtype(
@@ -4526,8 +4546,8 @@ class VistaIfi(LfdFile):
     def _init(self, **kwargs: Any) -> None:
         """Read header and metadata from file."""
         assert self._fh is not None
-        self.header = h = numpy.rec.fromfile(
-            self._fh, self._header_t, shape=1, byteorder='<'  # type: ignore
+        self.header = h = numpy.rec.fromfile(  # type: ignore[call-overload]
+            self._fh, self._header_t, shape=1, byteorder='<'
         )[0]
         if h['signature'] != b'VISTAIMAGE':
             raise LfdFileError(self)
@@ -4805,7 +4825,7 @@ class VistaIfli(LfdFile):
         assert self._fh is not None and self.shape is not None
         offset = self.offsets['PhasorPixelData']
         if memmap:
-            return numpy.memmap(  # type: ignore
+            return numpy.memmap(
                 self._fh,
                 dtype='<f4',
                 mode='r',
@@ -4818,7 +4838,7 @@ class VistaIfli(LfdFile):
         phasor.shape = self.shape
         return phasor
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
         data = self.asarray()
@@ -4894,10 +4914,10 @@ class FlimfastFlif(LfdFile):
     _filepattern = r'.*\.flif$'
     _figureargs = {'figsize': (6, 7)}
 
-    header: numpy.recarray
+    header: numpy.recarray[Any, Any]
     """File header."""
 
-    records: numpy.recarray
+    records: numpy.recarray[Any, Any]
     """Frame header."""
 
     _header_t = numpy.dtype(
@@ -4946,7 +4966,11 @@ class FlimfastFlif(LfdFile):
             raise LfdFileError(self)
         self._fh.seek(0)
         h = self.header = numpy.rec.fromfile(
-            self._fh, self._header_t, shape=1, byteorder='<'  # type: ignore
+            # type: ignore[call-overload]
+            self._fh,
+            self._header_t,
+            shape=1,
+            byteorder='<',
         )[0]
         h['creator'] = stripnull(h.creator)
         h['date'] = stripnull(h.date)
@@ -4964,7 +4988,8 @@ class FlimfastFlif(LfdFile):
         self._fh.seek(14 * 4, 1)  # header padding
         for i in range(h.phases):
             self.records[i] = numpy.rec.fromfile(
-                self._fh,  # type: ignore
+                # type: ignore[call-overload]
+                self._fh,
                 self._record_t,
                 shape=1,
                 byteorder='<',
@@ -5072,7 +5097,7 @@ class FlimageBin(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
         update_kwargs(kwargs, cmap='viridis')
@@ -5155,7 +5180,7 @@ class FlieOut(LfdFile):
         update_kwargs(kwargs, contiguous=False, metadata=None)
         tif.write(self.asarray(), **kwargs)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
         update_kwargs(kwargs, cmap='viridis')
@@ -5420,7 +5445,7 @@ class BioradPic(LfdFile):
         data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
         return data.reshape(*self.shape)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         data = self._asarray()
         imshow(
@@ -5762,7 +5787,7 @@ class Ccp4Map(LfdFile):
         assert self.shape is not None
         assert self.dtype is not None
         if memmap:
-            return numpy.memmap(  # type: ignore
+            return numpy.memmap(  # type: ignore[no-any-return, call-overload]
                 self._fh,
                 dtype=self.dtype,
                 mode='r',
@@ -5970,7 +5995,7 @@ class Vaa3dRaw(LfdFile):
         data = numpy.fromfile(self._fh, self.dtype)
         return data.reshape(*self.shape)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         data = self._asarray()
         imshow(
@@ -6100,7 +6125,7 @@ class VoxxMap(LfdFile):
         data = numpy.fromfile(self._fh, numpy.uint8, 1024, sep=' ')
         return data.reshape(256, 4)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape(1, 256, -1)
         ax = figure.add_subplot(1, 1, 1)
@@ -6209,7 +6234,7 @@ class NetpbmFile(LfdFile):
         """Return data from Netpbm file."""
         return self._netpbm.asarray(**kwargs)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
@@ -6286,7 +6311,7 @@ class OifFile(LfdFile):
         assert self._oif is not None
         return self._oif.asarray(**kwargs)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
@@ -6362,9 +6387,9 @@ class CziFile(LfdFile):
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data from CZI file."""
         assert self._czi is not None
-        return self._czi.asarray(**kwargs)
+        return self._czi.asarray(**kwargs)  # type: ignore[no-any-return]
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
@@ -6449,7 +6474,7 @@ class TiffFile(LfdFile):
         assert self._tif is not None
         return self._tif.asarray(**kwargs)
 
-    def _plot(self, figure, /, **kwargs: Any) -> None:
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         page = self._series.keyframe
         imshow(
@@ -6477,7 +6502,7 @@ class TiffFile(LfdFile):
 
 
 def convert_fbd2b64(
-    fbdfile: str | os.PathLike,
+    fbdfile: str | os.PathLike[Any],
     /,
     b64files: str = '{filename}_c{channel:02}t{frame:04}.b64',
     *,
@@ -6614,7 +6639,7 @@ def convert_fbd2b64(
 
 
 def convert2tiff(
-    files,
+    files: str | os.PathLike[Any] | Sequence[str | os.PathLike[Any]],
     /,
     *,
     verbose: bool = True,
@@ -6677,7 +6702,7 @@ def uleb128(leb: bytes, /) -> int:
 def read_record(
     meta: dict[str, Any],
     fields: dict[str, str],
-    fh,
+    fh: Any,
     /,
     *,
     byteorder: Literal['>', '<'] = '<',
@@ -6704,7 +6729,7 @@ def determine_shape(
     /,
     *,
     validate: bool = True,
-    exception=LfdFileError,
+    exception: type[Exception] = LfdFileError,
 ) -> tuple[int, ...]:
     """Validate and return array shape from dtype and data size.
 
@@ -6800,7 +6825,7 @@ def nullfunc(*args: Any, **kwargs: Any) -> None:
     return
 
 
-def log_warning(msg, /, *args: Any, **kwargs: Any) -> None:
+def log_warning(msg: Any, /, *args: Any, **kwargs: Any) -> None:
     """Log message with level WARNING."""
     import logging
 
@@ -6816,17 +6841,18 @@ def main() -> None:
 
     @click.group()
     @click.version_option(version=__version__)
-    def cli():
+    def cli() -> None:
         pass
 
     @cli.command(help='Run unit tests.')
-    def doctest():
+    def doctest() -> None:
         import doctest
 
+        m: ModuleType | None
         try:
             import lfdfiles.lfdfiles as m
         except ImportError:
-            m = None  # type: ignore
+            m = None
         try:
             os.chdir('tests')
         except Exception:
@@ -6849,7 +6875,7 @@ def main() -> None:
         type=click.IntRange(0, 10, clamp=False),
     )
     @click.argument('files', nargs=-1, type=click.Path(dir_okay=False))
-    def convert(format, compress, files):
+    def convert(format: str, compress: int, files: Any) -> None:
         if not files:
             files = askopenfilename(
                 title='Select LFD file(s)',
@@ -6861,7 +6887,7 @@ def main() -> None:
 
     @cli.command(help='View data in file.')
     @click.argument('files', nargs=-1, type=click.Path(dir_okay=False))
-    def view(files):
+    def view(files: Any) -> None:
         if not files:
             files = askopenfilename(
                 title='Select LFD file(s)', filetypes=[('All files', '*')]
