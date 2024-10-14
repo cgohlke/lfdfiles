@@ -12,14 +12,13 @@ jobs:
         os: [ubuntu-22.04, macos-12, windows-2019]
     steps:
       - uses: actions/checkout@v4
-      - uses: pypa/cibuildwheel@v2.21.0
+      - uses: pypa/cibuildwheel@v2.21.3
         env:
           MACOSX_DEPLOYMENT_TARGET: "11.0"
           # CIBW_ENVIRONMENT: "PIP_PRE=1"
           CIBW_BUILD_VERBOSITY: 3
           CIBW_SKIP: "pp* cp37* cp38* *musllinux* *i686 *ppc64le *s390x cp39*win*arm64 cp310*win*arm64"
           CIBW_BEFORE_ALL_MACOS: curl -O https://mac.r-project.org/openmp/openmp-14.0.6-darwin20-Release.tar.gz && sudo tar fvxz openmp-14.0.6-darwin20-Release.tar.gz -C /
-          # CIBW_ARCHS_LINUX: auto aarch64
           CIBW_ARCHS_LINUX: auto
           CIBW_ARCHS_MACOS: x86_64 arm64
           CIBW_ARCHS_WINDOWS: AMD64 ARM64 x86
