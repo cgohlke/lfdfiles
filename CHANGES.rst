@@ -1,6 +1,10 @@
 Revisions
 ---------
 
+2024.10.24
+
+- Fix variable length little-endian base 128 decoding.
+
 2024.9.15
 
 - Improve typing.
