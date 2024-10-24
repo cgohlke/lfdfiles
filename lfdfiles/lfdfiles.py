@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.9.15
+:Version: 2024.10.24
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,10 +76,10 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.5, 3.13.0rc2 64-bit
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0 64-bit
 - `Cython <https://pypi.org/project/cython/>`_ 3.0.11 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.1
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.8.30 (optional)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.2
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.9.20 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2024.5.24 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2024.5.24 (optional)
@@ -90,6 +90,10 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2024.10.24
+
+- Fix variable length little-endian base 128 decoding.
 
 2024.9.15
 
@@ -217,9 +221,10 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2024.9.15'
+__version__ = '2024.10.24'
 
 __all__ = [
+    '__version__',
     'LfdFile',
     'LfdFileSequence',
     'LfdFileError',
@@ -4751,8 +4756,13 @@ class VistaIfli(LfdFile):
             header['FrameScanPlaneInfo'] = struct.unpack('<f', fh.read(4))
         if version >= 9 and offsets['CommentsInfo'] > 0:
             fh.seek(offsets['CommentsInfo'])
-            size = uleb128(fh.read(2))
-            header['Comments'] = fh.read(size).decode()
+            size, hdrlen = uleb128(fh.read(4))
+            if size > 0:
+                fh.seek(offsets['CommentsInfo'] + hdrlen)
+                try:
+                    header['Comments'] = fh.read(size).decode()
+                except UnicodeDecodeError:
+                    log_warning('failed to read CommentsInfo')
         if offsets['ModFrequency'] > 0:
             fh.seek(offsets['ModFrequency'])
             header['ModFrequency'] = struct.unpack(
@@ -6694,9 +6704,18 @@ def convert2tiff(
         registry.insert(0, cls)
 
 
-def uleb128(leb: bytes, /) -> int:
+def uleb128(leb: bytes, /) -> tuple[int, int]:
     """Return little-endian base 128 decoded integer."""
-    return (leb[0] & 0x7F) + ((leb[1] & 0x7F) << 7)
+    i = 0
+    shift = 0
+    value = 0
+    for b in leb:
+        i += 1
+        value += (b & 0x7F) << shift
+        if b >> 7 == 0:
+            break
+        shift += 7
+    return value, i
 
 
 def read_record(
