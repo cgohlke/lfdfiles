@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.9.15
+:Version: 2024.10.24
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,10 +49,10 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.5, 3.13.0rc2 64-bit
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0 64-bit
 - `Cython <https://pypi.org/project/cython/>`_ 3.0.11 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.1
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.8.30 (optional)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.2
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.9.20 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2024.5.24 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2024.5.24 (optional)
@@ -63,6 +63,10 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2024.10.24
+
+- Fix variable length little-endian base 128 decoding.
 
 2024.9.15
 
