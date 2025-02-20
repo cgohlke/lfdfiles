@@ -2,16 +2,19 @@
 
 """Lfdfiles package Setuptools script."""
 
+import os
 import re
 import sys
 
+import numpy
 from setuptools import Extension, setup
-from setuptools.command.build_ext import build_ext as _build_ext
 
 buildnumber = ''
 
+DEBUG = bool(os.environ.get('LFDFILES_DEBUG', False))
 
-def search(pattern, string, flags=0):
+
+def search(pattern: str, string: str, flags: int = 0) -> str:
     """Return first match of pattern in string."""
     match = re.search(pattern, string, flags)
     if match is None:
@@ -19,7 +22,7 @@ def search(pattern, string, flags=0):
     return match.groups()[0]
 
 
-def fix_docstring_examples(docstring):
+def fix_docstring_examples(docstring: str) -> str:
     """Return docstring with examples fixed for GitHub."""
     start = True
     indent = False
@@ -80,39 +83,17 @@ if 'sdist' in sys.argv:
     with open('CHANGES.rst', encoding='utf-8') as fh:
         old = fh.read()
 
-    d = revisions.splitlines()[-1]
-    old = old.split(d)[-1]
+    old = old.split(revisions.splitlines()[-1])[-1]
     with open('CHANGES.rst', 'w', encoding='utf-8') as fh:
         fh.write(revisions.strip())
         fh.write(old)
 
-
-class build_ext(_build_ext):
-    """Delay import numpy until build."""
-
-    def finalize_options(self):
-        _build_ext.finalize_options(self)
-        if isinstance(__builtins__, dict):
-            __builtins__['__NUMPY_SETUP__'] = False
-        else:
-            setattr(__builtins__, '__NUMPY_SETUP__', False)
-        import numpy
-
-        self.include_dirs.append(numpy.get_include())
-
-
-# Work around "Cython in setup_requires doesn't work"
-# https://github.com/pypa/setuptools/issues/1317
-try:
-    import Cython  # noqa
-
-    ext = '.pyx'
-except ImportError:
-    ext = '.c'
-
-if sys.platform == 'win32':
+if DEBUG:
+    extra_compile_args = ['/Zi', '/Od']
+    extra_link_args = ['-debug:full']
+elif sys.platform == 'win32':
     extra_compile_args = ['/openmp']
-    extra_link_args: list[str] = []
+    extra_link_args = []
 elif sys.platform == 'darwin':
     # https://mac.r-project.org/openmp/
     extra_compile_args = ['-Xclang', '-fopenmp']
@@ -124,15 +105,16 @@ else:
 ext_modules = [
     Extension(
         'lfdfiles._lfdfiles',
-        ['lfdfiles/_lfdfiles' + ext],
-        extra_compile_args=extra_compile_args,
-        extra_link_args=extra_link_args,
+        ['lfdfiles/_lfdfiles.pyx'],
         define_macros=[
             # ('CYTHON_TRACE_NOGIL', '1'),
             # ('CYTHON_LIMITED_API', '1'),
             # ('Py_LIMITED_API', '1'),
             ('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'),
         ],
+        extra_compile_args=extra_compile_args,
+        extra_link_args=extra_link_args,
+        include_dirs=[numpy.get_include()],
     ),
 ]
 
@@ -151,7 +133,15 @@ setup(
         'Source Code': 'https://github.com/cgohlke/lfdfiles',
         # 'Documentation': 'https://',
     },
-    python_requires='>=3.9',
+    packages=['lfdfiles'],
+    package_data={'lfdfiles': ['py.typed']},
+    entry_points={
+        'console_scripts': [
+            'lfdfiles = lfdfiles.__main__:main',
+            'fbd2b64 = lfdfiles.fbd2b64:main',
+        ]
+    },
+    python_requires='>=3.10',
     install_requires=['numpy', 'tifffile', 'click'],
     setup_requires=['setuptools', 'numpy'],
     extras_require={
@@ -164,16 +154,7 @@ setup(
         ],
         'test': ['pytest'],
     },
-    packages=['lfdfiles'],
-    package_data={'lfdfiles': ['py.typed']},
-    entry_points={
-        'console_scripts': [
-            'lfdfiles = lfdfiles.__main__:main',
-            'fbd2b64 = lfdfiles.fbd2b64:main',
-        ]
-    },
     ext_modules=ext_modules,
-    cmdclass={'build_ext': build_ext},
     zip_safe=False,
     platforms=['any'],
     classifiers=[
