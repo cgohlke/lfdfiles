@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.10.24
+:Version: 2025.3.16
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +49,26 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.11 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.9.20 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2024.5.24 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2024.5.24 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.9.2
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.9, 3.13.2 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.0.12 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.3.13 (optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.1.1 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.1.1 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.1
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.8
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.3.16
+
+- Replace deprecated tifffile.stripnull function.
+- Fix misspelled VistaIfli.header keys.
+- Drop support for Python 3.9.
 
 2024.10.24
 
@@ -111,7 +117,7 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.8 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.9 is no longer supported. 32-bit versions are deprecated.
 
 The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
 <https://learn.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist>`_
