@@ -1,6 +1,6 @@
 # lfdfiles.py
 
-# Copyright (c) 2012-2024, Christoph Gohlke
+# Copyright (c) 2012-2025, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD 3-Clause
-:Version: 2024.10.24
+:Version: 2025.3.16
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,26 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.7, 3.13.0 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.11 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.1.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2024.9.20 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2024.5.24 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2024.5.24 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.9.2
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.9, 3.13.2 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.0.12 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.3.13 (optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.1.1 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.1.1 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.1
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.1.7
+- `Click <https://pypi.python.org/pypi/click>`_ 8.1.8
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.3.16
+
+- Replace deprecated tifffile.stripnull function.
+- Fix misspelled VistaIfli.header keys.
+- Drop support for Python 3.9.
 
 2024.10.24
 
@@ -138,7 +144,7 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.8 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.9 is no longer supported. 32-bit versions are deprecated.
 
 The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
 <https://learn.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist>`_
@@ -221,7 +227,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2024.10.24'
+__version__ = '2025.3.16'
 
 __all__ = [
     '__version__',
@@ -308,7 +314,6 @@ from tifffile import (
     imshow,
     parse_kwargs,
     product,
-    stripnull,
     update_kwargs,
 )
 
@@ -1100,7 +1105,7 @@ class SimfcsVpl(LfdFile):
         elif self._filesize >= 790:
             if self._fh.read(7)[:6] != b'vimage':
                 raise LfdFileError(self)
-            self.name = bytes2str(stripnull(self._fh.read(15)))
+            self.name = bytes2str(self._fh.read(15))
         else:
             raise LfdFileError(self)
         self.shape = 256, 3
@@ -3659,13 +3664,13 @@ class FlimboxFbd(LfdFile):
             **self.decoder_settings,
         )
 
-        markers_out = markers_out[markers_out > 0]
+        markers_out = markers_out[markers_out > 0]  # type: ignore[assignment]
         if len(markers_out) == max_markers:
             warnings.warn(
                 f'number of markers exceeded buffer size {max_markers}'
             )
 
-        return bins_out, times_out, markers_out  # type: ignore[return-value]
+        return bins_out, times_out, markers_out
 
     def frames(
         self,
@@ -3868,6 +3873,7 @@ class FlimboxFbd(LfdFile):
         ax.set_ylabel('Counts')
         ax.set_xlim((0, self.pmax // self.pdiv - 1))
         bins, times, markers = self.decode()
+        bins_channel: Any  # for mypy
         for ch, bins_channel in enumerate(bins):
             histogram = numpy.bincount(bins_channel[bins_channel >= 0])
             ax.plot(histogram, label=f'Ch{ch}')
@@ -4678,9 +4684,9 @@ class VistaIfli(LfdFile):
         fields['PixelTime'] = 'f'
         fields['PixelIntervalTime'] = 'f'
         fields['LineIntervalTime'] = 'f'
-        fields['FrameInternvalTime'] = 'f'
+        fields['FrameIntervalTime'] = 'f'
         fields['ModFrequencyCount'] = 'i'
-        fields['CrossCorolationFequency'] = 'f'
+        fields['CrossCorrelationFrequency'] = 'f'
         fields['FrameRepeat'] = 'H'
         read_record(header, fields, fh)
 
@@ -5378,7 +5384,7 @@ class BioradPic(LfdFile):
         if file_id != 12345:
             raise LfdFileError(self)
         self.header = dict(
-            name=bytes2str(stripnull(name)).strip(),
+            name=bytes2str(name).strip(),
             ramp1_min=ramp1_min,
             ramp1_max=ramp1_max,
             color1=color1,
@@ -5434,7 +5440,7 @@ class BioradPic(LfdFile):
             level, more, notetype, x, y, note = struct.unpack(
                 '<hi4xhhh80s', self._fh.read(96)
             )
-            note = bytes2str(stripnull(note)).strip()
+            note = bytes2str(note).strip()
             # TODO: parse notes to dict
             notes.append((note, notetype, level, x, y))
             if note[:5] == 'AXIS_':
@@ -5660,7 +5666,7 @@ class Ccp4Map(LfdFile):
     symboltable: list[bytes]
     """Symmetry records as defined in International Tables."""
 
-    labels: list[str]
+    labels: list[bytes]
     """Column labels."""
 
     density_min: float
@@ -6060,8 +6066,9 @@ def vaa3draw_write(
         raise ValueError('data must be up to 5 dimensional')
     if byteorder is None:
         byteorder = '<' if sys.byteorder == 'little' else '>'
-    if byteorder not in '><':
+    elif byteorder not in {'>', '<'}:
         raise ValueError(f'invalid byteorder {byteorder}')
+    assert byteorder is not None  # for mypy
     itemsize = {'B': 1, 'H': 2, 'f': 4}[data.dtype.char]
     dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
     header = b'raw_image_stack_by_hpeng'
@@ -6617,6 +6624,7 @@ def convert_fbd2b64(
             pyplot.title('Cross correlation phase histogram')
             pyplot.xlabel('Bin')
             pyplot.ylabel('Counts')
+            bins_channel: Any  # for mypy
             for ch, bins_channel in enumerate(decoded[0]):
                 histogram = numpy.bincount(bins_channel[bins_channel >= 0])
                 pyplot.plot(histogram, label=f'Ch{ch}')
@@ -6824,18 +6832,38 @@ def format_dict(
     return '\n'.join(result)
 
 
+def stripnull(string: bytes) -> bytes:
+    r"""Return byte string truncated at first null character.
+
+    Use to clean NULL terminated C strings.
+
+    >>> stripnull(b'bytes\x00\x00b')
+    b'bytes'
+
+    """
+    i = string.find(b'\x00')
+    return string if i < 0 else string[:i]
+
+
 def bytes2str(
-    b: bytes,
-    /,
-    encoding: str | None = None,
-    errors: str = 'strict',
+    b: bytes, /, encoding: str | None = None, errors: str = 'strict'
 ) -> str:
-    """Return string from encoded bytes."""
-    if encoding is not None:
-        return b.decode(encoding, errors)
+    """Return Unicode string from encoded bytes up to first NULL character."""
+    if encoding is None or '16' not in encoding:
+        i = b.find(b'\x00')
+        if i >= 0:
+            b = b[:i]
+    else:
+        # utf-16
+        i = b.find(b'\x00\x00')
+        if i >= 0:
+            b = b[: i + i % 2]
+
     try:
-        return b.decode('utf-8', errors)
+        return b.decode('utf-8' if encoding is None else encoding, errors)
     except UnicodeDecodeError:
+        if encoding is not None:
+            raise
         return b.decode('cp1252', errors)
 
 
