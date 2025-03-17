@@ -1,6 +1,12 @@
 Revisions
 ---------
 
+2025.3.16
+
+- Replace deprecated tifffile.stripnull function.
+- Fix misspelled VistaIfli.header keys.
+- Drop support for Python 3.9.
+
 2024.10.24
 
 - Fix variable length little-endian base 128 decoding.
@@ -107,7 +113,7 @@ Revisions
 
 2020.9.18
 
-- Remove support for Python 3.6 (NEP 29).
+- Drop support for Python 3.6 (NEP 29).
 - Support os.PathLike file names.
 - Fix writing contiguous series to TIFF files with tifffile >= 2020.9.3.
 
@@ -117,7 +123,7 @@ Revisions
 - Read Olympus Image files via oiffile module.
 - Read Netpbm formats via netpbmfile module.
 - Add B64, Z64, and I64 write functions.
-- Remove support for Python 2.7 and 3.5.
+- Drop support for Python 2.7 and 3.5.
 
 2019.7.2
 
