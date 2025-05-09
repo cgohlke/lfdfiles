@@ -71,7 +71,7 @@ if 'sdist' in sys.argv:
     license = license.replace('# ', '').replace('#', '')
 
     with open('LICENSE', 'w', encoding='utf-8') as fh:
-        fh.write('BSD 3-Clause License\n\n')
+        fh.write('BSD-3-Clause license\n\n')
         fh.write(license)
 
     revisions = search(
@@ -121,7 +121,7 @@ ext_modules = [
 setup(
     name='lfdfiles',
     version=version,
-    license='BSD',
+    license='BSD-3-Clause',
     description=description,
     long_description=readme,
     long_description_content_type='text/x-rst',
@@ -152,14 +152,12 @@ setup(
             'oiffile',
             'netpbmfile',
         ],
-        'test': ['pytest'],
     },
     ext_modules=ext_modules,
     zip_safe=False,
     platforms=['any'],
     classifiers=[
         'Development Status :: 4 - Beta',
-        'License :: OSI Approved :: BSD License',
         'Intended Audience :: Science/Research',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
@@ -169,5 +167,6 @@ setup(
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
     ],
 )
