@@ -5,6 +5,7 @@
 # cython: wraparound = False
 # cython: cdivision = True
 # cython: nonecheck = False
+# cython: freethreading_compatible = True
 
 # Copyright (c) 2012-2025, Christoph Gohlke
 # All rights reserved.
@@ -35,12 +36,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Fast implementations for the lfdfiles module.
-
-:Author: Christoph Gohlke
-:License: BSD 3-Clause
-
-"""
+"""Fast implementations for the lfdfiles module."""
 
 from cython.parallel import parallel, prange
 
@@ -261,31 +257,30 @@ def flimbox_histogram(
                         hist_out[f, c, idx, w] += 1
 
 
-cdef enum:
-    MASK_PCC = 0b00000000000000000000000011111111
-    MASK_TCC = 0b00000000000000000000111111111111
-    MASK_ENA = 0b00000000000000000001000000000000
-    MASK_WN0 = 0b00000000000000001110000000000000
-    MASK_PH0 = 0b00000000000000010000000000000000
-    MASK_PH1 = 0b00000000000000100000000000000000
-    MASK_WN1 = 0b00000000000111000000000000000000
-    MASK_WN2 = 0b00000000111000000000000000000000
-    MASK_PH2 = 0b00000001000000000000000000000000
-    MASK_PH3 = 0b00000010000000000000000000000000
-    MASK_WN3 = 0b00011100000000000000000000000000
-    MASK_ADR = 0b11100000000000000000000000000000
+cdef:
+    const uint32_t MASK_PCC = 0b00000000000000000000000011111111
+    const uint32_t MASK_TCC = 0b00000000000000000000111111111111
+    const uint32_t MASK_ENA = 0b00000000000000000001000000000000
+    const uint32_t MASK_WN0 = 0b00000000000000001110000000000000
+    const uint32_t MASK_PH0 = 0b00000000000000010000000000000000
+    const uint32_t MASK_PH1 = 0b00000000000000100000000000000000
+    const uint32_t MASK_WN1 = 0b00000000000111000000000000000000
+    const uint32_t MASK_WN2 = 0b00000000111000000000000000000000
+    const uint32_t MASK_PH2 = 0b00000001000000000000000000000000
+    const uint32_t MASK_PH3 = 0b00000010000000000000000000000000
+    const uint32_t MASK_WN3 = 0b00011100000000000000000000000000
+    const uint32_t MASK_ADR = 0b11100000000000000000000000000000
 
-cdef enum:
-    SHR_ENA = 12
-    SHR_WN0 = 13
-    SHR_PH0 = 16
-    SHR_PH1 = 17
-    SHR_WN1 = 18
-    SHR_WN2 = 21
-    SHR_PH2 = 24
-    SHR_PH3 = 25
-    SHR_WN3 = 26
-    SHR_ADR = 29
+    const uint32_t SHR_ENA = 12
+    const uint32_t SHR_WN0 = 13
+    const uint32_t SHR_PH0 = 16
+    const uint32_t SHR_PH1 = 17
+    const uint32_t SHR_WN1 = 18
+    const uint32_t SHR_WN2 = 21
+    const uint32_t SHR_PH2 = 24
+    const uint32_t SHR_PH3 = 25
+    const uint32_t SHR_WN3 = 26
+    const uint32_t SHR_ADR = 29
 
 
 def sflim_decode(
@@ -398,13 +393,13 @@ cdef ssize_t _decode_address(
     # seek to first frame
     start = 0
     for i in range(size):
-        if (data[i] & <uint32_t> MASK_ENA) >> SHR_ENA:
+        if (data[i] & MASK_ENA) >> SHR_ENA:
             start = i
             break
     else:
         return -1
 
-    tcc0 = data[start] & <uint32_t> MASK_TCC
+    tcc0 = data[start] & MASK_TCC
     macrotime = tcc0
     macrotime0 = tcc0
     frames = 0
@@ -414,12 +409,12 @@ cdef ssize_t _decode_address(
 
         d = data[i]
 
-        if <uint32_t> address != (d & <uint32_t> MASK_ADR) >> SHR_ADR:
+        if <uint32_t> address != (d & MASK_ADR) >> SHR_ADR:
             continue
 
-        pcc = d & <uint32_t> MASK_PCC
-        tcc = d & <uint32_t> MASK_TCC
-        enable = (d & <uint32_t> MASK_ENA) >> SHR_ENA
+        pcc = d & MASK_PCC
+        tcc = d & MASK_TCC
+        enable = (d & MASK_ENA) >> SHR_ENA
 
         if tcc < tcc0:
             macrotime += 4096
@@ -439,34 +434,34 @@ cdef ssize_t _decode_address(
         x = pixelindex % width
         y = pixelindex // width
 
-        ph = (d & <uint32_t> MASK_PH0) >> SHR_PH0
+        ph = (d & MASK_PH0) >> SHR_PH0
         if ph:
             c = address * 4
-            h = (pcc + 32 * ((d & <uint32_t> MASK_WN0) >> SHR_WN0)) % 256
+            h = (pcc + 32 * ((d & MASK_WN0) >> SHR_WN0)) % 256
             openmp.omp_set_lock(&lock)
             sflim[c, h, y, x] += 1
             openmp.omp_unset_lock(&lock)
 
-        ph = (d & <uint32_t> MASK_PH1) >> SHR_PH1
+        ph = (d & MASK_PH1) >> SHR_PH1
         if ph:
             c = address * 4 + 1
-            h = (pcc + 32 * ((d & <uint32_t> MASK_WN1) >> SHR_WN1)) % 256
+            h = (pcc + 32 * ((d & MASK_WN1) >> SHR_WN1)) % 256
             openmp.omp_set_lock(&lock)
             sflim[c, h, y, x] += 1
             openmp.omp_unset_lock(&lock)
 
-        ph = (d & <uint32_t> MASK_PH2) >> SHR_PH2
+        ph = (d & MASK_PH2) >> SHR_PH2
         if ph:
             c = address * 4 + 2
-            h = (pcc + 32 * ((d & <uint32_t> MASK_WN2) >> SHR_WN2)) % 256
+            h = (pcc + 32 * ((d & MASK_WN2) >> SHR_WN2)) % 256
             openmp.omp_set_lock(&lock)
             sflim[c, h, y, x] += 1
             openmp.omp_unset_lock(&lock)
 
-        ph = (d & <uint32_t> MASK_PH3) >> SHR_PH3
+        ph = (d & MASK_PH3) >> SHR_PH3
         if ph:
             c = address * 4 + 3
-            h = (pcc + 32 * ((d & <uint32_t> MASK_WN3) >> SHR_WN3)) % 256
+            h = (pcc + 32 * ((d & MASK_WN3) >> SHR_WN3)) % 256
             openmp.omp_set_lock(&lock)
             sflim[c, h, y, x] += 1
             openmp.omp_unset_lock(&lock)
@@ -593,13 +588,13 @@ cdef ssize_t _decode_address_photons(
     # seek to first frame
     start = 0
     for i in range(size):
-        if (data[i] & <uint32_t> MASK_ENA) >> SHR_ENA:
+        if (data[i] & MASK_ENA) >> SHR_ENA:
             start = i
             break
     else:
         return -1
 
-    tcc0 = data[start] & <uint32_t> MASK_TCC
+    tcc0 = data[start] & MASK_TCC
     macrotime = tcc0
     macrotime0 = tcc0
     frames = 0
@@ -610,12 +605,12 @@ cdef ssize_t _decode_address_photons(
 
         d = data[i]
 
-        if <uint32_t> address != (d & <uint32_t> MASK_ADR) >> SHR_ADR:
+        if address != (d & MASK_ADR) >> SHR_ADR:
             continue
 
-        pcc = d & <uint32_t> MASK_PCC
-        tcc = d & <uint32_t> MASK_TCC
-        enable = (d & <uint32_t> MASK_ENA) >> SHR_ENA
+        pcc = d & MASK_PCC
+        tcc = d & MASK_TCC
+        enable = (d & MASK_ENA) >> SHR_ENA
 
         if tcc < tcc0:
             macrotime += 4096
@@ -635,11 +630,9 @@ cdef ssize_t _decode_address_photons(
         x = pixelindex % width
         y = pixelindex // width
 
-        ph = (d & <uint32_t> MASK_PH0) >> SHR_PH0
+        ph = (d & MASK_PH0) >> SHR_PH0
         if ph:
-            photons[np, 0] = (
-                (pcc + 32 * ((d & <uint32_t> MASK_WN0) >> SHR_WN0)) % 256
-            )
+            photons[np, 0] = (pcc + 32 * ((d & MASK_WN0) >> SHR_WN0)) % 256
             photons[np, 1] = <uint16_t> frames
             photons[np, 2] = <uint16_t> (address * 4)
             photons[np, 3] = <uint16_t> y
@@ -648,11 +641,9 @@ cdef ssize_t _decode_address_photons(
             if np == maxphotons:
                 break
 
-        ph = (d & <uint32_t> MASK_PH1) >> SHR_PH1
+        ph = (d & MASK_PH1) >> SHR_PH1
         if ph:
-            photons[np, 0] = (
-                (pcc + 32 * ((d & <uint32_t> MASK_WN1) >> SHR_WN1)) % 256
-            )
+            photons[np, 0] = (pcc + 32 * ((d & MASK_WN1) >> SHR_WN1)) % 256
             photons[np, 1] = <uint16_t> frames
             photons[np, 2] = <uint16_t> (address * 4 + 1)
             photons[np, 3] = <uint16_t> y
@@ -661,11 +652,9 @@ cdef ssize_t _decode_address_photons(
             if np == maxphotons:
                 break
 
-        ph = (d & <uint32_t> MASK_PH2) >> SHR_PH2
+        ph = (d & MASK_PH2) >> SHR_PH2
         if ph:
-            photons[np, 0] = (
-                (pcc + 32 * ((d & <uint32_t> MASK_WN2) >> SHR_WN2)) % 256
-            )
+            photons[np, 0] = (pcc + 32 * ((d & MASK_WN2) >> SHR_WN2)) % 256
             photons[np, 1] = <uint16_t> frames
             photons[np, 2] = <uint16_t> (address * 4 + 2)
             photons[np, 3] = <uint16_t> y
@@ -674,11 +663,9 @@ cdef ssize_t _decode_address_photons(
             if np == maxphotons:
                 break
 
-        ph = (d & <uint32_t> MASK_PH3) >> SHR_PH3
+        ph = (d & MASK_PH3) >> SHR_PH3
         if ph:
-            photons[np, 0] = (
-                (pcc + 32 * ((d & <uint32_t> MASK_WN3) >> SHR_WN3)) % 256
-            )
+            photons[np, 0] = (pcc + 32 * ((d & MASK_WN3) >> SHR_WN3)) % 256
             photons[np, 1] = <uint16_t> frames
             photons[np, 2] = <uint16_t> (address * 4 + 3)
             photons[np, 3] = <uint16_t> y
