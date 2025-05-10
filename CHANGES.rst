@@ -1,6 +1,12 @@
 Revisions
 ---------
 
+2025.5.10
+
+- Mark Cython extension free-threading compatible.
+- Remove doctest command line option.
+- Support Python 3.14.
+
 2025.3.16
 
 - Replace deprecated tifffile.stripnull function.
