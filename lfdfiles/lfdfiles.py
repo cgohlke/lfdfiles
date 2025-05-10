@@ -47,8 +47,8 @@ For example:
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
-:License: BSD 3-Clause
-:Version: 2025.3.16
+:License: BSD-3-Clause
+:Version: 2025.5.10
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,26 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.9, 3.13.2 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.12 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.3.13 (optional)
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.1.0 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.5.10 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.1.1 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.1.1 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.1
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.3
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.8
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.5.10
+
+- Mark Cython extension free-threading compatible.
+- Remove doctest command line option.
+- Support Python 3.14.
 
 2025.3.16
 
@@ -227,7 +233,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2025.3.16'
+__version__ = '2025.5.10'
 
 __all__ = [
     '__version__',
@@ -293,6 +299,7 @@ __all__ = [
 ]
 
 import copy
+import logging
 import math
 import os
 import re
@@ -1627,9 +1634,9 @@ class SimfcsIntPhsMod(LfdFile):
 
     Examples:
         >>> with SimfcsIntPhsMod('simfcs_1000.phs') as f:
-        ...     print(f.asarray().mean(-1).mean(-1))
+        ...     print(f.asarray().mean((1, 2)))
         ...
-        [5.72 0.   0.05]
+        [5.717 0 0.04645]
 
     """
 
@@ -1906,7 +1913,7 @@ class SimfcsRef(LfdFile):
         ...     f.totiff('_simfcs.ref.tif')
         ...     print(f.shape, data[:, 255, 255])
         ...
-        (5, 256, 256) [301.33  44.71   0.62  68.13   0.32]
+        (5, 256, 256) [301.3 44.71 0.6185 68.13 0.3174]
         >>> with TiffFile('_simfcs.ref.tif') as f:
         ...     assert_array_equal(f.asarray(), data)
         ...
@@ -2471,7 +2478,7 @@ class SimfcsR64(SimfcsRef):
         ...     f.totiff('_simfcs.r64.tif')
         ...     print(f.shape, data[:, 100, 200])
         ...
-        (5, 256, 256) [  0.25  23.22   0.64 104.33   2.12]
+        (5, 256, 256) [0.25 23.22 0.642 104.3 2.117]
         >>> with TiffFile('_simfcs.r64.tif') as f:
         ...     assert_array_equal(f.asarray(), data)
         ...
@@ -3174,7 +3181,7 @@ class FlimboxFbd(LfdFile):
     @staticmethod
     def _b2w8c4() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 8 windows, 4 channels
-        log_warning(
+        logger().warning(
             'FlimboxFbd: b2w8c4 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
@@ -3210,7 +3217,7 @@ class FlimboxFbd(LfdFile):
     @staticmethod
     def _b2w16c1() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 16 windows, 1 channel
-        log_warning(
+        logger().warning(
             'FlimboxFbd: b2w16c1 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
@@ -3235,7 +3242,7 @@ class FlimboxFbd(LfdFile):
     @staticmethod
     def _b2w16c2() -> dict[str, NDArray[numpy.int16] | int]:
         # return parameters to decode 16 windows, 2 channels
-        log_warning(
+        logger().warning(
             'FlimboxFbd: b2w16c2 decoder not tested. '
             'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
         )
@@ -3501,7 +3508,7 @@ class FlimboxFbd(LfdFile):
             windows = self._header_windows[hdr['windows_index']]
             self.windows = self.fbf.get('windows', windows)
             if self.windows != windows:
-                log_warning(
+                logger().warning(
                     'FlimboxFbd: '
                     'windows mismatch between FBF and FBD header '
                     f'({self.windows!r} != {windows!r})'
@@ -3510,7 +3517,7 @@ class FlimboxFbd(LfdFile):
             channels = self._header_channels[hdr['channels_index']]
             self.channels = self.fbf.get('channels', channels)
             if self.channels != channels:
-                log_warning(
+                logger().warning(
                     'FlimboxFbd: '
                     'channels mismatch between FBF and FBD header '
                     f'({self.channels!r} != {channels!r})'
@@ -4563,7 +4570,9 @@ class VistaIfi(LfdFile):
         if h['signature'] != b'VISTAIMAGE':
             raise LfdFileError(self)
         if h['version'] != 4:
-            log_warning(f'unrecognized VistaIfi file version {h["version"]}')
+            logger().warning(
+                f'unrecognized VistaIfi file version {h["version"]}'
+            )
         self.shape = tuple(int(i) for i in reversed(h['dimensions']))
         if self.shape[0] == 1:
             self.shape = self.shape[1:]
@@ -4768,7 +4777,7 @@ class VistaIfli(LfdFile):
                 try:
                     header['Comments'] = fh.read(size).decode()
                 except UnicodeDecodeError:
-                    log_warning('failed to read CommentsInfo')
+                    logger().warning('failed to read CommentsInfo')
         if offsets['ModFrequency'] > 0:
             fh.seek(offsets['ModFrequency'])
             header['ModFrequency'] = struct.unpack(
@@ -4801,7 +4810,7 @@ class VistaIfli(LfdFile):
 
         if sizer > 1 or sizee > 1:
             # TODO: Support for multi-positional or spectral VistaIfli
-            log_warning(
+            logger().warning(
                 'Support for multi-positional or spectral VistaIfli files is '
                 'experimental. Please submit a sample file.'
             )
@@ -5081,7 +5090,7 @@ class FlimageBin(LfdFile):
         ...     f.totiff('_flimage.int.bin.tif')
         ...     print(f.shape, data[:, 219, 299])
         ...
-        (3, 220, 300) [  1.23 111.8   36.93]
+        (3, 220, 300) [1.23 111.8 36.93]
         >>> with TiffFile('_flimage.int.bin.tif') as f:
         ...     assert_array_equal(f.asarray(), data)
         ...
@@ -6872,41 +6881,19 @@ def nullfunc(*args: Any, **kwargs: Any) -> None:
     return
 
 
-def log_warning(msg: Any, /, *args: Any, **kwargs: Any) -> None:
-    """Log message with level WARNING."""
-    import logging
-
-    logging.getLogger(__name__).warning(msg, *args, **kwargs)
+def logger() -> logging.Logger:
+    """Return logger for lfdfiles module."""
+    return logging.getLogger('lfdfiles')
 
 
 def main() -> None:
     """Command line usage main function."""
     import click
-    from numpy.testing import assert_array_equal  # noqa: used in doctest
-
-    setattr(sys.modules[__name__], 'assert_array_equal', assert_array_equal)
 
     @click.group()
     @click.version_option(version=__version__)
     def cli() -> None:
         pass
-
-    @cli.command(help='Run unit tests.')
-    def doctest() -> None:
-        import doctest
-
-        m: ModuleType | None
-        try:
-            import lfdfiles.lfdfiles as m
-        except ImportError:
-            m = None
-        try:
-            os.chdir('tests')
-        except Exception:
-            print('Test files not found.')
-            return
-        numpy.set_printoptions(suppress=True, precision=2)
-        doctest.testmod(m, optionflags=doctest.ELLIPSIS)
 
     @cli.command(help='Convert files to TIFF.')
     @click.option(
