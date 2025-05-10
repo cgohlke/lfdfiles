@@ -20,8 +20,8 @@ For example:
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
-:License: BSD 3-Clause
-:Version: 2025.3.16
+:License: BSD-3-Clause
+:Version: 2025.5.10
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +49,26 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.9, 3.13.2 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.0.12 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.3.13 (optional)
+- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.1.0 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.5.10 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.1.1 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.1.1 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.1
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.3
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.1.8
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.5.10
+
+- Mark Cython extension free-threading compatible.
+- Remove doctest command line option.
+- Support Python 3.14.
 
 2025.3.16
 
