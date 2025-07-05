@@ -2,8 +2,6 @@
 
 """Lfdfiles package command line script."""
 
-import sys
-
 from .lfdfiles import main
 
-sys.exit(main())
+main()
