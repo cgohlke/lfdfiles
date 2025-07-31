@@ -1,6 +1,11 @@
 Revisions
 ---------
 
+2025.7.31
+
+- Read variants of SimFCS REF files.
+- Drop support for Python 3.10.
+
 2025.5.10
 
 - Mark Cython extension free-threading compatible.
