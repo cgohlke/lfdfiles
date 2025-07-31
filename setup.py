@@ -141,7 +141,7 @@ setup(
             'fbd2b64 = lfdfiles.fbd2b64:main',
         ]
     },
-    python_requires='>=3.10',
+    python_requires='>=3.11',
     install_requires=['numpy', 'tifffile', 'click'],
     setup_requires=['setuptools', 'numpy'],
     extras_require={
@@ -163,7 +163,6 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Cython',
         'Programming Language :: Python :: 3 :: Only',
-        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
