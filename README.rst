@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.5.10
+:Version: 2025.7.31
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +49,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.10.11, 3.11.9, 3.12.10, 3.13.3 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.1.0 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.2.5
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.5.10 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.5, 3.14.0rc 64-bit
+- `Cython <https://pypi.org/project/cython/>`_ 3.1.2 (build)
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.2
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.6.11 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.1.1 (optional)
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.5.10 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.3
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.5
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.1.8
+- `Click <https://pypi.python.org/pypi/click>`_ 8.2.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.7.31
+
+- Read variants of SimFCS REF files.
+- Drop support for Python 3.10.
 
 2025.5.10
 
