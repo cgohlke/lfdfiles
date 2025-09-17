@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.7.31
+:Version: 2025.9.17
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,30 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.5, 3.14.0rc 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.1.2 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.6.11 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc 64-bit
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.3
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.9.9 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.9.17 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.5.10 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.5
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.6
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.2.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.9.17
+
+- Many breaking changes to FLIMbox functionality (use fbdfile package instead):
+- Discourage use of FlimboxFbd, FlimboxFbf, and FlimboxFbs classes.
+- Use fbdfile package to implement FlimboxFbd, FlimboxFbf, and FlimboxFbs.
+- Remove flimbox_histogram, flimbox_decode, and sflim_decode functions.
+- Remove convert_fbd2b64 function and fbd2b64 command line app.
+- Remove deprecated SimfcsFbf, and SimfcsFbd classes.
+- Remove deprecated simfcsfbd_histogram and simfcsfbd_decode functions.
 
 2025.7.31
 
@@ -155,13 +165,9 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.9 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.10 is no longer supported. 32-bit versions are deprecated.
 
-The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
-<https://learn.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist>`_
-is required on Windows.
-
-Many of the LFD's file formats are not documented and might change arbitrarily.
+Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
 No guarantee can be made as to the correctness of code and documentation.
 
@@ -170,6 +176,10 @@ available in separate, human readable journal files (`.jrn`).
 
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
+
+The Laboratory for Fluorescence Dynamics (LFD) was a national research
+resource center for biomedical fluorescence spectroscopy funded by the
+National Institutes of Health from 1986 to 2022 (grant P41GM103540).
 
 References
 ----------
@@ -187,17 +197,17 @@ The following software is referenced in this module:
 4.  `FlimFast <https://www.cgohlke.com/flimfast/>`_ is software for
     frequency-domain, full-field, fluorescence lifetime imaging at video
     rate, developed by Christoph Gohlke at UIUC.
-5.  FLImage is software for frequency-domain, full-field, fluorescence
-    lifetime imaging, developed by Christoph Gohlke at UIUC.
-    Implemented in LabVIEW.
+5.  `FLImage <https://www.cgohlke.com/#software>`_ is software for
+    frequency-domain, full-field, fluorescence lifetime imaging, developed
+    by Christoph Gohlke at UIUC. Implemented in LabVIEW.
 6.  FLIez is software for frequency-domain, full-field, fluorescence
     lifetime imaging, developed by Glen Redford at UIUC.
 7.  Flie is software for frequency-domain, full-field, fluorescence
     lifetime imaging, developed by Peter Schneider at MPIBPC.
     Implemented on a Sun UltraSPARC.
-8.  FLOP is software for frequency-domain, cuvette, fluorescence lifetime
-    measurements, developed by Christoph Gohlke at MPIBPC.
-    Implemented in LabVIEW.
+8.  `FLOP97 <https://www.cgohlke.com/#software>`__ is software for
+    frequency-domain, cuvette, fluorescence lifetime measurements, developed
+    by Christoph Gohlke at MPIBPC. Implemented in LabVIEW.
 9.  `VistaVision <http://www.iss.com/microscopy/software/vistavision.html>`_
     is commercial software for instrument control, data acquisition and data
     processing by ISS Inc (Champaign, IL).
@@ -238,7 +248,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2025.7.31'
+__version__ = '2025.9.17'
 
 __all__ = [
     '__version__',
@@ -283,7 +293,6 @@ __all__ = [
     'OifFile',
     'CziFile',
     'TiffFile',
-    'convert_fbd2b64',
     'convert2tiff',
     'simfcsb64_write',
     'simfcsi64_write',
@@ -293,14 +302,6 @@ __all__ = [
     'vaa3draw_write',
     'voxxmap_write',
     'bioradpic_write',
-    'flimbox_histogram',
-    'flimbox_decode',
-    'sflim_decode',
-    # deprecated
-    'SimfcsFbf',
-    'SimfcsFbd',
-    'simfcsfbd_histogram',
-    'simfcsfbd_decode',
 ]
 
 import copy
@@ -313,7 +314,6 @@ import sys
 import warnings
 import zipfile
 import zlib
-from functools import cached_property
 from typing import IO, TYPE_CHECKING
 
 import numpy
@@ -1740,7 +1740,7 @@ class SimfcsFit(LfdFile):
 
     _filepattern = r'.*\.fit$'
 
-    # type of data in file
+    # dtype of data in file
     _record_t = numpy.dtype(
         [
             ('p_fit', '<f8', (1024, 16)),
@@ -2607,89 +2607,16 @@ class FlimboxFbd(LfdFile):
     photon arrival windows, channels, and times.
     FBD files are written by SimFCS and VistaVision.
 
-    The measurement's frame size, pixel dwell time, number of sampling
-    windows, and scanner type are encoded in the last four letters of the
-    file name.
-    Newer FBD files, where the 3rd character in the file name tag is `0`,
-    start with the first 1kB of the firmware file used for the measurement,
-    followed by 31kB containing a binary record with measurement settings.
-    FBD files written by VistaVision are accompanied by FlimboxFbs setting
-    files.
-
-    It depends on the application and its setting how to interpret the
-    decoded data, for example, as time series, line scans, or image frames
-    of FCS or digital frequency domain fluorescence lifetime measurements.
-
-    The data word format depends on the device's firmware.
-    A common layout is::
-
-        |F|E|D|C|B|A|9|8|7|6|5|4|3|2|1|0|  data word bits
-                            |-----------|  pcc (cross correlation phase)
-                        |---------------|  tcc (cross correlation time)
-                      |-|                  marker (indicates start of frame)
-        |-------------|                    index into decoder table
-
-    The data word can be decoded into a cross correlation phase histogram
-    index (shown for the 1st harmonics)::
-
-        bin = (pmax-1 - (pcc + win * (pmax//windows)) % pmax) // pdiv
-
-    - ``bin``, cross correlation phase index (phase histogram bin number).
-    - ``pcc``, cross correlation phase (counter).
-    - ``pmax``, number of entries in cross correlation phase histogram.
-    - ``pdiv``, divisor to reduce number of entries in phase histogram.
-    - ``win``, arrival window.
-    - ``windows``, number of sampling windows.
-
-    The current implementation uses a decoder table to decode arrival windows
-    for each channel. This method is inefficient for 32-bit FLIMbox data
-    with large number of windows and channels.
-
-    Parameters:
-        filename:
-            Name of file to open.
-        code:
-            Four-character string, encoding frame size (1st char),
-            pixel dwell time (2nd char), number of sampling windows
-            (3rd char), and scanner type (4th char).
-            By default, the code is extracted from the file name.
-        frame_size:
-            Number of pixels in one line scan, excluding retrace.
-        windows:
-            Number of sampling windows used by FLIMbox.
-        channels:
-            Number of channels used by FLIMbox.
-        harmonics:
-            First or second harmonics.
-        pdiv:
-            Divisor to reduce number of entries in phase histogram.
-        pixel_dwell_time:
-            Number of microseconds the scanner remains at each pixel.
-        laser_frequency:
-            Laser frequency in Hz.
-            The default is 20000000 Hz, the internal FLIMbox frequency.
-        laser_factor:
-            Factor to correct dwell_time/laser_frequency.
-            Use when the scanner clock is not known exactly.
-        scanner_line_length:
-            Number of pixels in each line, including retrace.
-        scanner_line_start:
-            Index of first valid pixel in scan line.
-        scanner_frame_start:
-            Index of first valid pixel after marker.
-        scanner:
-            Scanner software or hardware.
-        synthesizer:
-            Synthesizer software or hardware.
-        **kwargs
-            Additional arguments are ignored.
+    FlimboxFbd is a light wrapper around the fbdfile.FbdFile class.
 
     Examples:
         >>> with FlimboxFbd('flimbox$CBCO.fbd') as f:
+        ...     f.laser_frequency
         ...     bins, times, markers = f.decode(
         ...         word_count=500000, skip_words=1900000
         ...     )
         ...
+        20000000
         >>> print(bins[0, :2], times[:2], markers)
         [53 51] [ 0 42] [ 44097 124815]
         >>> hist = [numpy.bincount(b[b >= 0]) for b in bins]
@@ -2701,1196 +2628,47 @@ class FlimboxFbd(LfdFile):
     _filepattern = r'.*\.fbd$'
     _figureargs = {'figsize': (6, 5)}
 
-    header: numpy.recarray[Any, Any] | None
-    """FLIMbox file header, if any."""
-
-    fbf: dict[str, Any] | None
-    """FLIMbox firmware header settings, if any."""
-
-    fbs: dict[str, Any] | None
-    """FLIMbox settings from FBS.XML file, if any."""
-
-    decoder: str | None
-    """Decoder settings function."""
-
-    code: str
-    """Four-character string from file name, if any."""
-
-    frame_size: int
-    """Number of pixels in one line scan, excluding retrace."""
-
-    windows: int
-    """Number of sampling windows used by FLIMbox."""
-
-    channels: int
-    """Number of channels used by FLIMbox."""
-
-    harmonics: int
-    """First or second harmonics."""
-
-    pdiv: int
-    """Divisor to reduce number of entries in phase histogram."""
-
-    pixel_dwell_time: float
-    """Number of microseconds the scanner remains at each pixel."""
-
-    laser_frequency: float
-    """Laser frequency in Hz."""
-
-    laser_factor: float
-    """Factor to correct dwell_time/laser_frequency."""
-
-    scanner_line_length: int
-    """Number of pixels in each line, including retrace."""
-
-    scanner_line_start: int
-    """Index of first valid pixel in scan line."""
-
-    scanner_frame_start: int
-    """Index of first valid pixel after marker."""
-
-    scanner: str
-    """Scanner software or hardware."""
-
-    synthesizer: str
-    """Synthesizer software or hardware."""
-
-    is_32bit: bool
-    """Data words are 32-bit."""
-
-    _data_offset: int
-
-    _attributes = (
-        'decoder',
-        'frame_size',
-        'windows',
-        'channels',
-        'harmonics',
-        'pdiv',
-        'pmax',
-        'pixel_dwell_time',
-        'laser_frequency',
-        'laser_factor',
-        'synthesizer',
-        'scanner',
-        'scanner_line_length',
-        'scanner_line_start',
-        'scanner_frame_start',
-    )
-
-    _frame_size: dict[str, int] = {
-        # Map 1st character in file name tag to image frame size
-        'A': 64,
-        'B': 128,
-        'C': 256,
-        'D': 320,
-        'E': 512,
-        'F': 640,
-        'G': 800,
-        'H': 1024,
-    }
-
-    _flimbox_settings: dict[str, tuple[int, int, int]] = {
-        # Map 3rd character in file name tag to (windows, channels, harmonics)
-        # '0': file contains header
-        'A': (2, 2, 1),
-        'B': (4, 2, 1),
-        'C': (8, 2, 1),
-        'F': (8, 4, 1),
-        'D': (16, 2, 1),
-        'E': (32, 2, 1),
-        'H': (64, 1, 1),
-        # second harmonics. P and Q might be switched in some files?
-        'N': (2, 2, 2),
-        'O': (4, 2, 2),  # frequency = 40000000 ?
-        'P': (8, 2, 2),
-        'G': (8, 4, 2),
-        'Q': (16, 2, 2),
-        'R': (32, 2, 2),
-        'S': (64, 1, 2),
-    }
-
-    _scanner_settings: dict[str, dict[str, Any]] = {
-        # Map 4th and 2nd character in file name tag to pixel_dwell_time,
-        # scanner_line_add, scanner_line_start, and scanner_frame_start.
-        # As of SimFCS ~2011.
-        # These values may not apply any longer and need to be overridden.
-        'S': {
-            'name': 'Native SimFCS, 3-axis card',
-            'A': (4, 198, 99, 0),
-            'J': (100, 20, 10, 0),
-            'B': (5, 408, 204, 0),
-            'K': (128, 16, 8, 0),
-            'C': (8, 256, 128, 0),
-            'L': (200, 10, 5, 0),
-            'D': (10, 204, 102, 0),
-            'M': (256, 8, 4, 0),
-            'E': (16, 128, 64, 0),
-            'N': (500, 4, 2, 0),
-            'F': (20, 102, 51, 0),
-            'O': (512, 4, 2, 0),
-            'G': (32, 64, 32, 0),
-            'P': (1000, 2, 1, 0),
-            'H': (50, 40, 20, 0),
-            'Q': (1024, 2, 1, 0),
-            'I': (64, 32, 16, 0),
-            'R': (2000, 1, 0, 0),
-        },
-        'O': {
-            'name': 'Olympus FV 1000, NI USB',
-            'A': (2, 10, 8, 0),
-            'F': (20, 56, 55, 0),
-            'B': (4, 10, 8, 0),
-            'G': (40, 28, 20, 0),
-            'C': (8, 10, 8, 0),
-            'H': (50, 12, 10, 0),
-            'D': (10, 112, 114, 0),
-            'I': (100, 12, 9, 0),
-            'E': (12.5, 90, 80, 0),
-            'J': (200, 10, 89, 0),
-        },
-        'Y': {
-            'name': 'Zeiss LSM510',
-            'A': (6.39, 344, 22, 0),
-            'D': (51.21, 176, 22, 414),
-            'B': (12.79, 344, 22, 0),
-            'E': (102.39, 88, 0, 242),
-            'C': (25.61, 344, 22, 0),
-            'F': (204.79, 12, 10, 0),
-        },
-        'Z': {
-            'name': 'Zeiss LSM710',
-            'A': (6.305, 344, 2, 0),
-            'B': (12.79, 344, 2, 0),
-            'C': (25.216, 344, 2, 0),
-            'D': (50.42, 176, 8, 414),
-            'E': (100.85, 88, 10, 242),
-            'F': (177.32, 12, 10, 0),
-        },
-        'I': {
-            'name': 'ISS Vista slow scanner',
-            'A': (4, 112, 73, 0),
-            'H': (32, 37, 28, 0),
-            'B': (6, 112, 73, 0),
-            'I': (40, 28, 19, 0),
-            'C': (8, 112, 73, 0),
-            'J': (64, 18, 14, 0),
-            'D': (10, 112, 73, 0),
-            'K': (200, 6, 4, 0),
-            'E': (12.5, 90, 59, 0),
-            'L': (500, 6, 4, 0),
-            'F': (16, 73, 48, 0),
-            'M': (1000, 6, 4, 0),
-            'G': (20, 56, 37, 0),
-        },
-        'V': {
-            'name': 'ISS Vista fast scanner',
-            'A': (4, 112, 73, 0),
-            'H': (32, 37, 28, 0),
-            'B': (6, 112, 73, 0),
-            'I': (40, 28, 19, 0),
-            'C': (8, 112, 73, 0),
-            'J': (64, 21, 14, 0),
-            'D': (10, 112, 73, 0),
-            'K': (100, 12, 8, 0),
-            'E': (12.5, 90, 59, 0),
-            'L': (200, 6, 4, 0),
-            'F': (16, 73, 48, 0),
-            'M': (500, 6, 4, 0),
-            'G': (20, 56, 37, 0),
-            'N': (1000, 6, 4, 0),
-        },
-        'T': {
-            # used with new file format only?
-            'name': 'IOTech scanner card'
-        },
-    }
-
-    _header_t = [
-        # Binary header starting at offset 1024 in files with $xx0x names.
-        # This is written as a memory dump of a Delphi record, hence the pads
-        ('owner', '<i4'),  # must be 0
-        ('pixel_dwell_time_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('frame_size_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('line_length', '<i4'),
-        ('points_end_of_frame', '<i4'),
-        ('x_starting_pixel', '<i4'),
-        ('line_integrate', '<i4'),
-        ('scanner_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('synthesizer_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('windows_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('channels_index', '<i4'),  # index into SimFCS dropdown ctrl
-        ('_pad1', '<i4'),
-        ('line_time', '<f8'),
-        ('frame_time', '<f8'),
-        ('scanner', '<i4'),
-        ('_pad2', '<f4'),
-        ('laser_frequency', '<f8'),
-        ('laser_factor', '<f8'),
-        ('frames_to_average', '<i4'),
-        ('enabled_before_start', '<i4'),
-        # the my?calib fields may be missing
-        ('mypcalib', '<16f4'),
-        ('mymcalib', '<16f4'),
-        ('mypcalib1', '<16f4'),
-        ('mymcalib1', '<16f4'),
-        ('mypcalib2', '<16f4'),
-        ('mymcalib2', '<16f4'),
-        ('mypcalib3', '<16f4'),
-        ('mymcalib3', '<16f4'),
-        ('h1', '<i4'),
-        ('h2', '<i4'),
-        ('process_enable', 'b'),
-        ('integrate', 'b'),
-        ('detect_maitai', 'b'),
-        ('trigger_on_up', 'b'),
-        ('line_scan', 'b'),
-        ('circular_scan', 'b'),
-        ('average_frames_on_reading', 'b'),
-        ('show_each_frame', 'b'),
-        ('write_each_frame', 'b'),
-        ('write_one_big_file', 'b'),
-        ('subtract_background', 'b'),
-        ('normalize_to_frames', 'b'),
-        ('second_harmonic', 'b'),
-        ('_pad3', '3b'),
-        ('bin_pixel_by_index', '<i4'),
-        ('jitter_level', '<i4'),
-        ('phaseshift1', '<i4'),
-        ('phaseshift2', '<i4'),
-        ('acquire_item_index', '<i4'),
-        ('acquire_number_of_frames', '<i4'),
-        ('show_channel_index', '<i4'),
-    ]
-
-    _header_pixel_dwell_time = (
-        # fmt: off
-        1, 2, 4, 5, 8, 10, 16, 20, 32, 50, 64,
-        100, 128, 200, 256, 500, 512, 1000, 2000,
-        # fmt: on
-    )
-
-    _header_frame_size = (64, 128, 256, 320, 512, 640, 800, 1024)
-
-    _header_bin_pixel_by = (1, 2, 4, 8)
-
-    _header_windows = (4, 8, 16, 32, 64)
-
-    _header_channels = (
-        1,
-        2,
-        4,
-        # the following are not supported
-        4,  # 2 to 4 ch
-        4,  # 2 ch 8w Spartan6
-        4,  # 4 ch 16w frame
-    )
-
-    _header_scanners = (
-        'IOTech scanner card',
-        'Native SimFCS, 3-axis card',
-        'Olympus FV 1000, NI USB',
-        'Zeiss LSM510',
-        'Zeiss LSM710',
-        'ISS Vista slow scanner',
-        'ISS Vista fast scanner',
-        'M2 laptop only',
-        'IOTech scanner card',
-        'Leica SP8',
-        'Zeiss LSM880',
-        'Olympus FV3000',
-        'Olympus 2P',
-    )
-
-    _header_synthesizers = (
-        'Internal FLIMbox frequency',
-        'Fianium',
-        'Spectra Physics MaiTai',
-        'Spectra Physics Tsunami',
-        'Coherent Chameleon',
-    )
-
-    @cached_property
-    def decoder_settings(self) -> dict[str, NDArray[numpy.int16] | int]:
-        """Return parameters to decode FLIMbox data stream.
-
-        Returns:
-            - 'decoder_table' - Decoder table mapping channel and window
-              indices to actual arrival windows.
-              The shape is (channels, window indices) and dtype is int16.
-            - 'tcc_mask', 'tcc_shr' - Binary mask and number of bits to right
-              shift to extract cross correlation time from data word.
-            - 'pcc_mask', 'pcc_shr' - Binary mask and number of bits to right
-              shift to extract cross correlation phase from data word.
-            - 'marker_mask', 'marker_shr' - Binary mask and number of bits to
-              right shift to extract markers from data word.
-            - 'win_mask', 'win_shr' - Binary mask and number of bits to right
-              shift to extract index into lookup table from data word.
-
-        """
-        bytes_ = 4 if self.is_32bit else 2
-        decoder = f'_b{bytes_}w{self.windows}c{self.channels}'
-        if (
-            self.windows == 16
-            and self.channels == 4
-            and self.fbf is not None
-            and self.fbf.get('time', '').endswith('Bit')
-        ):
-            t = self.fbf['time'][:-3]
-            decoder += f't{t}'
-        self.decoder = decoder
-        try:
-            settings = getattr(self, decoder)()
-        except Exception as exc:
-            raise ValueError(f'Decoder{decoder} not implemented') from exc
-        return settings  # type: ignore[no-any-return]
-
-    @staticmethod
-    def _b4w16c4t10() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 32-bit, 16 windows, 4 channels (Spartan6)
-        # with line markers
-        # 0b00000000000000000000000011111111 cross correlation phase
-        # 0b00000000000000000000001111111111 cross correlation time  # 10 bit
-        # 0b00000000000000000000010000000000 start of line marker
-        # 0b00000000000000000000100000000000 start of frame marker
-        # 0b00000000000000000001000000000000 ch0 photon
-        # 0b00000000000000011110000000000000 ch0 window
-        # 0b00000000000000100000000000000000 ch1 photon
-        # 0b00000000001111000000000000000000 ch1 window
-        # 0b00000000010000000000000000000000 ch2 photon
-        # 0b00000111100000000000000000000000 ch2 window
-        # 0b00001000000000000000000000000000 ch3 photon
-        # 0b11110000000000000000000000000000 ch3 window
-        table = numpy.full((4, 2**20), -1, numpy.int16)
-        for i in range(2**20):
-            if i & 0b1:
-                table[0, i] = (i & 0b11110) >> 1
-            if i & 0b100000:
-                table[1, i] = (i & 0b1111000000) >> 6
-            if i & 0b10000000000:
-                table[2, i] = (i & 0b111100000000000) >> 11
-            if i & 0b1000000000000000:
-                table[3, i] = (i & 0b11110000000000000000) >> 16
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0x3FF,
-            'tcc_shr': 0,
-            'pcc_mask': 0xFF,
-            'pcc_shr': 0,
-            # 'line_mask': 0x400,
-            # 'line_shr': 10,
-            'marker_mask': 0x800,
-            'marker_shr': 11,
-            'win_mask': 0xFFFFF000,
-            'win_shr': 12,
-            'swap_words': True,
-        }
-
-    @staticmethod
-    def _b4w16c4t11() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 32-bit, 16 windows, 4 channels (Spartan6)
-        # without line markers
-        # 0b00000000000000000000000011111111 cross correlation phase
-        # 0b00000000000000000000011111111111 cross correlation time  # 11 bit
-        # 0b00000000000000000000100000000000 start of frame marker
-        # 0b00000000000000000001000000000000 ch0 photon
-        # 0b00000000000000011110000000000000 ch0 window
-        # 0b00000000000000100000000000000000 ch1 photon
-        # 0b00000000001111000000000000000000 ch1 window
-        # 0b00000000010000000000000000000000 ch2 photon
-        # 0b00000111100000000000000000000000 ch2 window
-        # 0b00001000000000000000000000000000 ch3 photon
-        # 0b11110000000000000000000000000000 ch3 window
-        return {
-            **FlimboxFbd._b4w16c4t10(),
-            'tcc_mask': 0x7FF,
-            'marker_mask': 0x800,
-            'marker_shr': 11,
-        }
-
-    @staticmethod
-    def _b4w8c4() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 32-bit, 8 windows, 4 channels (Spartan-6)
-        # 0b00000000000000000000000000000001 ch0 photon
-        # 0b00000000000000000000000000001110 ch0 window
-        # 0b00000000000000000000000000010000 ch1 photon
-        # 0b00000000000000000000000011100000 ch1 window
-        # 0b00000000000000000000000100000000 ch2 photon
-        # 0b00000000000000000000111000000000 ch2 window
-        # 0b00000000000000000001000000000000 ch3 photon
-        # 0b00000000000000001110000000000000 ch3 window
-        # 0b00000000111111110000000000000000 cross correlation phase
-        # 0b00011111111111110000000000000000 cross correlation time
-        # 0b01000000000000000000000000000000 start of frame marker
-        table = numpy.full((4, 2**16), -1, numpy.int16)
-        for i in range(2**16):
-            if i & 0b1:
-                table[0, i] = (i & 0b1110) >> 1
-            if i & 0b10000:
-                table[1, i] = (i & 0b11100000) >> 5
-            if i & 0b100000000:
-                table[2, i] = (i & 0b111000000000) >> 9
-            if i & 0b1000000000000:
-                table[3, i] = (i & 0b1110000000000000) >> 13
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0x1FFF0000,
-            'tcc_shr': 16,
-            'pcc_mask': 0xFF0000,
-            'pcc_shr': 16,
-            'marker_mask': 0x40000000,
-            'marker_shr': 30,
-            'win_mask': 0xFFFF,
-            'win_shr': 0,
-            # 'swap_words': True,  # ?
-        }
-
-    @staticmethod
-    def _b2w4c2() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 4 windows, 2 channels
-        # fmt: off
-        table = numpy.array(
-            [[-1, 0, -1, 1, -1, 2, -1, 3, -1, 0, -1, -1, 1, 0, -1, 2,
-              1, 0, 3, 2, 1, 0, 3, 2, 1, -1, 3, 2, -1, -1, 3, -1],
-             [-1, -1, 0, -1, 1, -1, 2, -1, 3, 0, -1, -1, 0, 3, -1, 0,
-              1, 2, 2, 1, 2, 1, 1, 2, 3, -1, 0, 3, -1, -1, 3, -1]],
-            numpy.int16
-        )
-        # fmt: on
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0x3FF,
-            'tcc_shr': 0,
-            'pcc_mask': 0xFF,
-            'pcc_shr': 0,
-            'marker_mask': 0x400,
-            'marker_shr': 10,
-            'win_mask': 0xF800,
-            'win_shr': 11,
-        }
-
-    @staticmethod
-    def _b2w8c2() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 8 windows, 2 channels
-        # TODO: this does not correctly decode data acquired with ISS firmware
-        table = numpy.full((2, 81), -1, numpy.int16)
-        table[0, 1:9] = range(8)
-        table[1, 9:17] = range(8)
-        table[:, 17:] = numpy.mgrid[0:8, 0:8].reshape(2, -1)[::-1, :]
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0xFF,
-            'tcc_shr': 0,
-            'pcc_mask': 0x3F,
-            'pcc_shr': 0,
-            'marker_mask': 0x100,
-            'marker_shr': 8,
-            'win_mask': 0xFFFF,
-            'win_shr': 9,
-        }
-
-    @staticmethod
-    def _b2w8c4() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 8 windows, 4 channels
-        logger().warning(
-            'FlimboxFbd: b2w8c4 decoder not tested. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-        table = numpy.full((4, 128), -1, numpy.int16)
-        for i in range(128):
-            win = i & 0b0000111
-            ch0 = (i & 0b0001000) >> 3
-            ch1 = (i & 0b0010000) >> 4
-            ch2 = (i & 0b0100000) >> 5
-            ch3 = (i & 0b1000000) >> 6
-            if ch0 + ch1 + ch2 + ch3 != 1:
-                continue
-            if ch0:
-                table[0, i] = win
-            elif ch1:
-                table[1, i] = win
-            elif ch2:
-                table[2, i] = win
-            elif ch3:
-                table[3, i] = win
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0xFF,
-            'tcc_shr': 0,
-            'pcc_mask': 0x3F,
-            'pcc_shr': 0,
-            'marker_mask': 0x100,
-            'marker_shr': 8,
-            'win_mask': 0xFFFF,
-            'win_shr': 9,
-        }
-
-    @staticmethod
-    def _b2w16c1() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 16 windows, 1 channel
-        logger().warning(
-            'FlimboxFbd: b2w16c1 decoder not tested. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-        table = numpy.full((1, 32), -1, numpy.int16)
-        for i in range(32):
-            win = (i & 0b11110) >> 1
-            ch0 = i & 0b00001
-            if ch0:
-                table[0, i] = win
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0xFF,
-            'tcc_shr': 0,
-            'pcc_mask': 0x3F,
-            'pcc_shr': 0,
-            'marker_mask': 0x100,
-            'marker_shr': 8,
-            'win_mask': 0xFFFF,
-            'win_shr': 11,
-        }
-
-    @staticmethod
-    def _b2w16c2() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 16 windows, 2 channels
-        logger().warning(
-            'FlimboxFbd: b2w16c2 decoder not tested. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-        table = numpy.full((2, 64), -1, numpy.int16)
-        for i in range(64):
-            win = (i & 0b111100) >> 2
-            ch0 = (i & 0b000010) >> 1
-            ch1 = i & 0b000001
-            if ch0 + ch1 != 1:
-                continue
-            if ch0:
-                table[0, i] = win
-            elif ch1:
-                table[1, i] = win
-        return {
-            'decoder_table': table,
-            'tcc_mask': 0xFF,
-            'tcc_shr': 0,
-            'pcc_mask': 0x3F,
-            'pcc_shr': 0,
-            'marker_mask': 0x100,
-            'marker_shr': 8,
-            'win_mask': 0xFFFF,
-            'win_shr': 10,
-        }
-
-    @staticmethod
-    def _b2w32c2() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 32 windows, 2 channels
-        # TODO
-        raise NotImplementedError(
-            'FlimboxFbd: b2w32c2 decoder not implemented. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-
-    @staticmethod
-    def _b2w64c1() -> dict[str, NDArray[numpy.int16] | int]:
-        # return parameters to decode 64 windows, 1 channel
-        # TODO
-        raise NotImplementedError(
-            'FlimboxFbd: b2w64c1 decoder not implemented. '
-            'Please submit a FBD file to https://github.com/cgohlke/lfdfiles'
-        )
-
-    def _init(
-        self,
-        code: str = '',
-        frame_size: int = -1,
-        windows: int = -1,
-        channels: int = -1,
-        harmonics: int = -1,
-        pdiv: int = -1,
-        pixel_dwell_time: float = -1.0,
-        laser_frequency: float = -1.0,
-        laser_factor: float = -1.0,
-        scanner_line_length: int = -1,
-        scanner_line_start: int = -1,
-        scanner_frame_start: int = -1,
-        scanner: str = '',
-        synthesizer: str = '',
-        **kwargs: Any,
-    ) -> None:
+    def _init(self, **kwargs: Any) -> None:
         """Initialize instance from file name code or file header."""
-        self.decoder = None
-        self.fbf = None
-        self.fbs = None
-        self.header = None
-        self.code = code
-        self.frame_size = frame_size
-        self.windows = windows
-        self.channels = channels
-        self.harmonics = harmonics
-        self.pdiv = pdiv
-        self.pixel_dwell_time = pixel_dwell_time
-        self.laser_frequency = laser_frequency
-        self.laser_factor = laser_factor
-        self.scanner_line_length = scanner_line_length
-        self.scanner_line_start = scanner_line_start
-        self.scanner_frame_start = scanner_frame_start
-        self.scanner = scanner
-        self.synthesizer = synthesizer
-        self.is_32bit = False
-        self._data_offset = 0
+        from fbdfile import FbdFile
 
-        if not self.code:
-            match = re.search(
-                r'.*\$([A-Z][A-Z][A-Z0-9][A-Z])\.fbd',
-                self._filename,
-                re.IGNORECASE,
-            )
-            if match is None:
-                self.code = 'CFCS'  # old FLIMbox file ?
-                warnings.warn(
-                    'FlimboxFbd: failed to parse code from file name. '
-                    f'Using {self.code!r}'
-                )
-            else:
-                self.code = match.group(1)
+        # warnings.warn(
+        #     '<lfdfiles.FlimboxFBD> is deprecated since 2025.9.17. '
+        #     'Use fbdfile.FbdFile instead.',
+        #     DeprecationWarning,
+        #     stacklevel=2,
+        # )
 
-        assert len(self.code) == 4, code
-
-        if self.code[2].isnumeric() and self._from_fbs():
-            pass
-        elif self.code[2] == '0':
-            self._from_header()
-        else:
-            self._from_code()
-
-        assert self.windows >= 0
-        assert self.channels >= 0
-        assert self.harmonics >= 0
-
-        if self.pdiv <= 0:
-            try:
-                self.pdiv = max(1, self.pmax // 64)
-            except AttributeError:
-                pass
-        assert self.pdiv >= 0
-
-        for attr in self._attributes:
-            value = getattr(self, attr)
-            if isinstance(value, (int, float)):
-                if value < 0:
-                    raise ValueError(f"'{attr}' not initialized")
-            elif not value:
-                # empty str
-                raise ValueError(f"'{attr}' not initialized")
-
-    def _from_fbs(self) -> bool:
-        """Initialize instance from VistaVision settings file."""
-        fname = self.filename.rsplit('$', 1)[0] + '.fbs.xml'
-        if not os.path.exists(fname):
-            return False
-        # self.pdiv = 1
-        with FlimboxFbs(fname) as fbs:
-            scn = fbs['ScanParams']
-            self.fbf = fbf = _flimboxfbf_parse(
-                fbs['FirmwareParams']['Description']
-            )
-            self.is_32bit = '32fifo' in fbf['decoder']
-            if self.harmonics < 0:
-                self.harmonics = (1, 2)[fbf['secondharmonic']]
-            if self.windows < 0:
-                self.windows = fbf['windows']
-            if self.channels < 0:
-                self.channels = fbf['channels']
-            if self.synthesizer == '':
-                self.synthesizer = 'Unknown'
-            if self.scanner == '':
-                try:
-                    self.scanner = scn['ScannerInfo']['ScannerID']
-                except IndexError:
-                    self.scanner = 'Unknown'
-            if self.laser_frequency < 0:
-                self.laser_frequency = float(scn['ExcitationFrequency'])
-            if self.laser_factor < 0:
-                self.laser_factor = 1.0
-            if self.scanner_line_length < 0:
-                self.scanner_line_length = int(scn['ScanLineLength'])
-            if self.scanner_line_start < 0:
-                self.scanner_line_start = int(scn['ScanLineLeftBorder'])
-            if 'PixelOffsetToFrameFlag' in scn:
-                # TODO: check this
-                self.scanner_frame_start = scn['PixelOffsetToFrameFlag']
-            else:
-                self.scanner_frame_start = 0
-            if self.pixel_dwell_time < 0:
-                self.pixel_dwell_time = scn['PixelDwellTime']['value']
-                if (
-                    'Unit' in scn['PixelDwellTime']
-                    and 'milli' in scn['PixelDwellTime']['Unit'].lower()
-                ):
-                    self.pixel_dwell_time *= 1000
-            if self.frame_size < 0:
-                self.frame_size = scn['XPixels']
-            self.fbs = fbs.asdict()
-        self._fh.seek(0)
         try:
-            if self._fh.read(32).decode('cp1252').isprintable():
-                # header detected, assume encoded data starts at 33K
-                self._data_offset = 33792
-        except UnicodeDecodeError:
-            pass
-        self._fh.seek(0)
-        return True
-
-    def _from_code(self) -> None:
-        """Initialize instance from file name code."""
-        code = self.code
-        if self.frame_size < 0:
-            self.frame_size = self._frame_size[code[0]]
-        if self.windows < 0 or self.channels < 0 or self.harmonics < 0:
-            windows, channels, harmonics = self._flimbox_settings[code[2]]
-            if self.windows < 0:
-                self.windows = windows
-            if self.channels < 0:
-                self.channels = channels
-            if self.harmonics < 0:
-                self.harmonics = harmonics
-        if (
-            self.pixel_dwell_time < 0
-            or self.scanner_line_length < 0
-            or self.scanner_line_start < 0
-            or self.scanner_frame_start < 0
-        ):
-            (
-                pixel_dwell_time,
-                scanner_line_add,
-                scanner_line_start,
-                scanner_frame_start,
-            ) = self._scanner_settings[code[3]][code[1]]
-            if self.pixel_dwell_time < 0:
-                self.pixel_dwell_time = pixel_dwell_time
-            if self.scanner_frame_start < 0:
-                self.scanner_frame_start = scanner_frame_start
-            if self.scanner_line_start < 0:
-                self.scanner_line_start = scanner_line_start
-            if self.scanner_line_length < 0:
-                self.scanner_line_length = self.frame_size + scanner_line_add
-        if self.scanner == '':
-            self.scanner = self._scanner_settings[code[3]]['name']
-        if self.synthesizer == '':
-            self.synthesizer = 'Unknown'
-        if self.laser_frequency < 0:
-            self.laser_frequency = 20000000 * self.harmonics
-        if self.laser_factor < 0:
-            self.laser_factor = 1.0
-
-    def _from_header(self) -> None:
-        """Initialize instance from 32 KB file header."""
-        # the first 1024 bytes contain the start of a FLIMbox firmware file
-        with FlimboxFbf(self._fh.name, validate=False) as fbf:
-            self.fbf = fbf.asdict()
-        assert self.fbf is not None
-        assert self._fh is not None
-
-        self.is_32bit = '32fifo' in self.fbf['decoder']
-
-        # the next 31kB contain the binary file header
-        self._fh.seek(1024)
-        self.header = hdr = numpy.fromfile(self._fh, self._header_t, 1)[0]
-        if hdr['owner'] != 0:
-            raise ValueError(f"unknown header format '{hdr['owner']}'")
-
-        # detect corrupted header: the my?calib fields may be missing
-        if (
-            hdr['process_enable'] > 1
-            or hdr['integrate'] > 1
-            or hdr['line_scan'] > 1
-            or hdr['subtract_background'] > 1
-            or hdr['second_harmonic'] > 1
-        ):
-            # reload modified header
-            self._header_t = (
-                FlimboxFbd._header_t[:20] + FlimboxFbd._header_t[28:]
+            self._fbd = FbdFile(
+                os.path.join(self._filepath, self._filename), **kwargs
             )
-            self._fh.seek(1024)
-            self.header = hdr = numpy.fromfile(self._fh, self._header_t, 1)[0]
+        except Exception as exc:
+            raise LfdFileError(self) from exc
 
-        if self.harmonics < 0:
-            self.harmonics = (1, 2)[self.fbf['secondharmonic']]
-        if self.windows < 0:
-            windows = self._header_windows[hdr['windows_index']]
-            self.windows = self.fbf.get('windows', windows)
-            if self.windows != windows:
-                logger().warning(
-                    'FlimboxFbd: '
-                    'windows mismatch between FBF and FBD header '
-                    f'({self.windows!r} != {windows!r})'
-                )
-        if self.channels < 0:
-            channels = self._header_channels[hdr['channels_index']]
-            self.channels = self.fbf.get('channels', channels)
-            if self.channels != channels:
-                logger().warning(
-                    'FlimboxFbd: '
-                    'channels mismatch between FBF and FBD header '
-                    f'({self.channels!r} != {channels!r})'
-                )
-        if self.synthesizer == '':
-            try:
-                self.synthesizer = self._header_synthesizers[
-                    hdr['synthesizer_index']
-                ]
-            except IndexError:
-                self.synthesizer = 'Unknown'
-        if self.scanner == '':
-            try:
-                self.scanner = self._header_scanners[hdr['scanner_index']]
-            except IndexError:
-                self.scanner = 'Unknown'
-        if self.laser_frequency < 0:
-            self.laser_frequency = float(hdr['laser_frequency'])
-        if self.laser_factor < 0:
-            self.laser_factor = float(hdr['laser_factor'])
-        if self.scanner_line_length < 0:
-            self.scanner_line_length = int(hdr['line_length'])
-        if self.scanner_line_start < 0:
-            self.scanner_line_start = int(hdr['x_starting_pixel'])
-        self.scanner_frame_start = max(self.scanner_frame_start, 0)
+        # self.shape = ...
+        # self.dtype = ...
+        # self.axes = ...
 
-        if hdr['frame_time'] >= hdr['line_time'] > 1.0:
-            if self.frame_size < 0:
-                self.frame_size = round(hdr['frame_time'] / hdr['line_time'])
-                for frame_size in self._header_frame_size:
-                    if abs(self.frame_size - frame_size) < 3:
-                        self.frame_size = frame_size
-                        break
-            if self.pixel_dwell_time < 0:
-                self.pixel_dwell_time = float(
-                    hdr['frame_time']
-                    / (self.frame_size * self.scanner_line_length)
-                )
-        else:
-            if self.frame_size < 0:
-                try:
-                    self.frame_size = round(
-                        self._header_frame_size[hdr['frame_size_index']]
-                    )
-                except IndexError:
-                    # fall back to filename
-                    if self.code:
-                        self.frame_size = self._frame_size[self.code[0]]
-            if self.pixel_dwell_time < 0:
-                try:
-                    # use file name
-                    dwt = self._scanner_settings[self.code[3]][self.code[1]][0]
-                except (IndexError, KeyError, TypeError):
-                    try:
-                        dwt = self._header_pixel_dwell_time[
-                            hdr['pixel_dwell_time_index']
-                        ]
-                    except IndexError:
-                        dwt = 1.0
-                self.pixel_dwell_time = dwt
+    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
+        """Return cross correlation phase index of shape (channels, size)."""
+        return self._fbd.decode(**kwargs)[0]
 
-        self._data_offset = 65536  # start of encoded data; contains 2 headers
-
-    @property
-    def pmax(self) -> int:
-        """Number of entries in cross correlation phase histogram."""
-        d = self.decoder_settings
-        return int((d['pcc_mask'] >> d['pcc_shr']) + 1) // self.harmonics
-
-    @property
-    def scanner_line_add(self) -> int:
-        """Number of pixels added to each line (for retrace)."""
-        return self.scanner_line_length - self.frame_size
-
-    @property
-    def units_per_sample(self) -> float:
-        """Number of FLIMbox units per scanner sample."""
-        return float(
-            (self.pixel_dwell_time * 1e-6)
-            * (self.pmax / (self.pmax - 1))
-            * (self.laser_frequency * self.laser_factor)
-        )
-
-    def decode(
-        self,
-        data: NDArray[Any] | None = None,
-        *,
-        word_count: int = -1,
-        skip_words: int = 0,
-        max_markers: int = 65536,
-        **kwargs: Any,
-    ) -> tuple[
-        NDArray[numpy.int8 | numpy.int16],
-        NDArray[numpy.uint32 | numpy.uint64],
-        NDArray[numpy.intp],
-    ]:
-        """Return decoded FLIMbox data stream.
-
-        Parameters:
-            data:
-                FLIMbox data stream. By default, the data is read from file.
-            word_count:
-                Number of data words to process.
-                By default, all words are processed.
-            skip_words:
-                Number of data words to skip at beginning of stream.
-            max_markers:
-                Maximum number of markers expected in data stream.
-
-        Returns:
-            bins:
-                Cross correlation phase index for all channels and data points.
-                A int8 array of shape (channels, size).
-                A value of -1 means no photon was counted.
-            times:
-                The times in FLIMbox counter units at each data point.
-                An array of type uint64 or uint32, potentially huge.
-            markers:
-                The indices of up markers in the data stream, usually
-                indicating frame starts. An array of type ssize_t.
-
-        """
-        assert self._fh is not None
-        dtype = numpy.dtype('<u4' if self.is_32bit else '<u2')
-        if data is None:
-            self._fh.seek(self._data_offset + skip_words * dtype.itemsize, 0)
-            data = numpy.fromfile(self._fh, dtype=dtype, count=word_count)
-        elif skip_words or word_count != -1:
-            if word_count < 0:
-                data = data[skip_words:word_count]
-            else:
-                data = data[skip_words : skip_words + word_count]
-        if data.dtype != dtype:
-            raise ValueError('invalid data dtype')
-
-        bins_out = numpy.empty(
-            (self.channels, data.size),
-            dtype=numpy.int8 if self.pmax // self.pdiv <= 128 else numpy.int16,
-        )
-        times_out = numpy.empty(data.size, dtype=numpy.uint64)
-        markers_out = numpy.zeros(max_markers, dtype=numpy.intp)
-
-        flimbox_decode(
-            data,
-            bins_out,
-            times_out,
-            markers_out,
-            self.windows,
-            self.pdiv,
-            self.harmonics,
-            **self.decoder_settings,
-        )
-
-        markers_out = markers_out[markers_out > 0]
-        if len(markers_out) == max_markers:
-            warnings.warn(
-                f'number of markers exceeded buffer size {max_markers}'
-            )
-
-        return bins_out, times_out, markers_out
-
-    def frames(
-        self,
-        decoded: tuple[NDArray[Any], NDArray[Any], NDArray[Any]] | None,
-        /,
-        *,
-        select_frames: slice | None = None,
-        aspect_range: tuple[float, float] = (0.8, 1.2),
-        frame_cluster: int = 0,
-        **kwargs: Any,
-    ) -> tuple[tuple[int, int], list[tuple[int, int]]]:
-        """Return shape and start/stop indices of scanner frames.
-
-        If unable to detect any frames using the default settings, try to
-        determine a correction factor from clusters of frame durations.
-
-        Parameters:
-            decoded:
-                Times and markers as returned by the decode function.
-                If None, call :py:meth:`FlimboxFbd.decode`.
-            select_frames:
-                Specifies which image frames to return.
-                By default, all frames are returned.
-            aspect_range:
-                Minimum and maximum aspect ratios of valid frames.
-                The default lets 1:1 aspect pass.
-            frame_cluster:
-                Index of the frame duration cluster to use when calculating
-                the correction factor.
-            **kwargs:
-                Additional arguments passed to :py:meth:`FlimboxFbd.decode`.
-
-        Returns:
-            1. shape: Dimensions of scanner frame.
-            2. frame_markers: Start and stop indices of detected image frames.
-
-        """
-        if decoded is None:
-            decoded = self.decode(**kwargs)
-        times, markers = decoded[-2:]
-
-        line_time = self.scanner_line_length * self.units_per_sample
-        frame_durations = numpy.ediff1d(times[markers])
-
-        frame_markers = []
-        if aspect_range:
-            # detect frame markers assuming correct settings
-            line_num = sys.maxsize
-            for i, duration in enumerate(frame_durations):
-                lines = duration / line_time
-                aspect = self.frame_size / lines
-                if aspect_range[0] < aspect < aspect_range[1]:
-                    frame_markers.append(
-                        (int(markers[i]), int(markers[i + 1]) - 1)
-                    )
-                else:
-                    continue
-                line_num = min(line_num, lines)
-            line_num = int(round(line_num))
-
-        if not frame_markers:
-            # calculate frame duration clusters, assuming few clusters that
-            # are narrower and more separated than cluster_size.
-            cluster_size = 1024
-            clusters: list[list[int]] = []
-            cluster_indices = []
-            for d in frame_durations:
-                d = int(d)
-                for i, c in enumerate(clusters):
-                    if abs(d - c[0]) < cluster_size:
-                        cluster_indices.append(i)
-                        c[0] = min(c[0], d)
-                        c[1] += 1
-                        break
-                else:
-                    cluster_indices.append(len(clusters))
-                    clusters.append([d, 1])
-            clusters = list(sorted(clusters, key=lambda x: x[1], reverse=True))
-            # possible correction factors, assuming square frame shape
-            line_num = self.frame_size
-            laser_factors = [c[0] / (line_time * line_num) for c in clusters]
-            # select specified frame cluster
-            frame_cluster = min(frame_cluster, len(laser_factors) - 1)
-            self.laser_factor = laser_factors[frame_cluster]
-            frame_markers = [
-                (int(markers[i]), int(markers[i + 1]) - 1)
-                for i, c in enumerate(cluster_indices)
-                if c == frame_cluster
-            ]
-            msg = [
-                'no frames detected with default settings.'
-                'Using square shape and correction factor '
-                f'{self.laser_factor:.5f}.'
-            ]
-            if len(laser_factors) > 1:
-                factors = ', '.join(f'{i:.5f}' for i in laser_factors[:4])
-                msg.append(
-                    f'The most probable correction factors are: {factors}'
-                )
-            warnings.warn('\n'.join(msg))
-
-        if not isinstance(select_frames, slice):
-            select_frames = slice(select_frames)
-        frame_markers = frame_markers[select_frames]
-        if not frame_markers:
-            raise ValueError('no frames selected')
-        return (line_num, self.scanner_line_length), frame_markers
-
-    def asimage(
-        self,
-        decoded: tuple[NDArray[Any], NDArray[Any], NDArray[Any]] | None,
-        frames: tuple[tuple[int, int], list[tuple[int, int]]] | None,
-        /,
-        *,
-        integrate_frames: int = 1,
-        square_frame: bool = True,
-        **kwargs: Any,
-    ) -> NDArray[numpy.uint16]:
-        """Return image histograms from decoded data and detected frames.
-
-        This function may fail to produce expected results when settings
-        were recorded incorrectly, scanner and FLIMbox frequencies were out
-        of sync, or scanner settings were changed during acquisition.
-
-        Parameters:
-            decoded:
-                Bins, times, and markers as returned by the decode function.
-                If None, call :py:meth:`FlimboxFbd.decode`.
-            frames:
-                Scanner_shape and frame_markers as returned by the frames
-                function.
-                If None, call :py:meth:`FlimboxFbd.frames`.
-            integrate_frames:
-                Specifies which frames to sum. By default, all frames are
-                summed into one. If 0, no frames are summed.
-            square_frame:
-                If True, return square image (frame_size x frame_size),
-                else return full scanner frame.
-            **kwargs:
-                Additional arguments passed to :py:meth:`FlimboxFbd.decode`.
-
-        Returns:
-            Image histogram of shape (number of frames, channels in bins
-            array, detected line numbers, frame_size, histogram bins).
-
-        """
-        if decoded is None:
-            decoded = self.decode(**kwargs)
-        bins, times, markers = decoded
-        if frames is None:
-            frames = self.frames(decoded, **kwargs)
-        scanner_shape, frame_markers = frames
-        # an extra line to scanner frame to allow clipping indices
-        scanner_shape = scanner_shape[0] + 1, scanner_shape[1]
-        # allocate output array of scanner frame shape
-        shape = (
-            integrate_frames if integrate_frames else len(frame_markers),
-            bins.shape[0],  # channels
-            scanner_shape[0] * scanner_shape[1],
-            self.pmax // self.pdiv,
-        )
-        result = numpy.zeros(shape, dtype=numpy.uint16)
-        # calculate frame data histogram
-        flimbox_histogram(
-            bins,
-            times,
-            frame_markers,
-            self.units_per_sample,
-            self.scanner_frame_start,
-            result,
-        )
-        # reshape frames and slice valid region
-        result = result.reshape(shape[:2] + scanner_shape + shape[-1:])
-        if square_frame:
-            result = result[
-                ...,
-                : self.frame_size,
-                self.scanner_line_start : self.scanner_line_start
-                + self.frame_size,
-                :,
-            ]
-        return result
-
-    def _asarray(self, **kwargs: Any) -> NDArray[numpy.int8 | numpy.int16]:
-        """Return cross correlation phase index of shape (channels, size).
-
-        A value of -1 means no photon was counted.
-
-        """
-        return self.decode(data=None, **kwargs)[0]
+    def _close(self) -> None:
+        """Close FBD file."""
+        self._fbd.close()
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot lifetime histogram for all channels."""
         assert pyplot is not None
-        assert self.pmax is not None
-        assert self.pdiv is not None
+        assert self._fbd.pmax is not None
+        assert self._fbd.pdiv is not None
         ax = figure.add_subplot(1, 1, 1)
         ax.set_title(self._filename)
         ax.set_xlabel('Bin')
         ax.set_ylabel('Counts')
-        ax.set_xlim((0, self.pmax // self.pdiv - 1))
-        bins, times, markers = self.decode()
+        ax.set_xlim((0, self._fbd.pmax // self._fbd.pdiv - 1))
+        bins, times, markers = self._fbd.decode()
         bins_channel: Any  # for mypy
         for ch, bins_channel in enumerate(bins):
             histogram = numpy.bincount(bins_channel[bins_channel >= 0])
@@ -3899,39 +2677,25 @@ class FlimboxFbd(LfdFile):
 
     def _str(self) -> str | None:
         """Return additional information about file."""
-        info = [f'{a}: {getattr(self, a)}' for a in self._attributes]
-        if self.fbf is not None:
-            info.append(
-                indent(
-                    'firmware:',
-                    *(f'{k}: {v}'[:64] for k, v in self.fbf.items()),
-                )
-            )
-        if self.header is not None:
-            info.append(
-                indent(
-                    'header:',
-                    *(
-                        f'{k}: {self.header[k]}'[:64]
-                        for k, _ in self._header_t
-                        if k[0] != '_'
-                    ),
-                )
-            )
-        info.append(
-            indent(
-                'decoder_settings:',
-                *(
-                    (
-                        f'{k}: {v:#x}'
-                        if 'mask' in k
-                        else f'{k}: {v}'[:64].splitlines()[0]
-                    )
-                    for k, v in self.decoder_settings.items()
-                ),
-            )
-        )
-        return '\n'.join(info)
+        return str(self._fbd).split('\n', 1)[-1]
+
+    def __getattr__(self, name: str, /) -> Any:
+        """Return attributes from FdbFile instance."""
+        try:
+            attr = getattr(self._fbd, name)
+        except Exception as exc:
+            raise AttributeError(
+                f'{self.__class__.__name__!r} object has no attribute {name!r}'
+            ) from exc
+        return attr
+
+    def asimage(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> NDArray[numpy.uint16]:
+        """Return image histograms from decoded data and detected frames."""
+        return self._fbd.asimage(*args, **kwargs)
 
 
 class FlimboxFbs(LfdFile):
@@ -3962,14 +2726,17 @@ class FlimboxFbs(LfdFile):
 
     def _init(self, **kwargs: Any) -> None:
         """Read and parse XML."""
+        from fbdfile import fbs_read
+
+        # warnings.warn(
+        #     '<lfdfiles.FlimboxFbs> is deprecated since 2025.9.17. '
+        #     'Use fbdfile.fbs_read instead.',
+        #     DeprecationWarning,
+        #     stacklevel=2,
+        # )
+
         assert self._fh is not None
-        buf = self._fh.read(100)
-        if not ('<?xml ' in buf and '<FastFlimFbdDataSettings>' in buf):
-            raise LfdFileError(self)
-        self._fh.seek(0)
-        buf = self._fh.read()
-        info = tifffile.xml2dict(buf)
-        self._settings = info['FastFlimFbdDataSettings']
+        self._settings = fbs_read(self._fh)
         if not self._settings:
             raise LfdFileError(self)
 
@@ -4035,26 +2802,41 @@ class FlimboxFbf(LfdFile):
     _noplot = True
 
     _settings: dict[str, Any]
+    _maxheaderlength: int
 
     def _init(self, *, maxheaderlength: int = 1024, **kwargs: Any) -> None:
         """Read and parse NULL terminated header string."""
+        from fbdfile import fbf_read
+
+        # warnings.warn(
+        #     '<lfdfiles.FlimboxFbf> is deprecated since 2025.9.17. '
+        #     'Use fbdfile.fbf_read instead.',
+        #     DeprecationWarning,
+        #     stacklevel=2,
+        # )
+
         assert self._fh is not None
+
         try:
-            # the first 1024 bytes contain the header
-            header = self._fh.read(maxheaderlength).split(b'\x00', 1)[0]
-        except ValueError as exc:
+            self._settings = fbf_read(
+                self._fh, maxheaderlength=maxheaderlength
+            )
+        except Exception as exc:
             raise LfdFileError(self) from exc
-        header = bytes2str(header)
-        if len(header) != maxheaderlength:
-            self._fh.seek(len(header) + 1)
-        self._settings = _flimboxfbf_parse(header)
-        if not self._settings:
-            raise LfdFileError(self)
+        self._maxheaderlength = maxheaderlength
 
     def firmware(self) -> bytes:
         """Return firmware as binary string."""
+        from fbdfile import fbf_read
+
         assert self._fh is not None
-        return self._fh.read()  # type: ignore[no-any-return]
+        try:
+            firmware = fbf_read(
+                self._fh, maxheaderlength=self._maxheaderlength, firmware=True
+            )['firmware']
+        except Exception as exc:
+            raise LfdFileError(self) from exc
+        return firmware  # type: ignore[no-any-return]
 
     def asdict(self) -> dict[str, Any]:
         """Return settings as dict."""
@@ -4083,169 +2865,6 @@ class FlimboxFbf(LfdFile):
 
     def __iter__(self) -> Iterator[Any]:
         return iter(self._settings)
-
-
-def _flimboxfbf_parse(header: str, /) -> dict[str, Any]:
-    """Return FLIMbox firmware settings from header."""
-    settings: dict[str, Any] = {}
-    try:
-        header, comment_ = header.rsplit('/', 1)
-        comment = [comment_]
-    except ValueError:
-        comment = []
-    for name, value, unit in re.findall(
-        r'([a-zA-Z\s]*)([.\d]*)([a-zA-Z\d]*)/', header
-    ):
-        name = name.strip().lower()
-        if not name:
-            name = {'w': 'windows', 'ch': 'channels'}.get(unit, None)
-            unit = ''
-        if not name:
-            comment.append(name + value + unit)
-            continue
-        if unit == 'MHz':
-            unit = 1000000
-        try:
-            if unit:
-                value = int(value) * int(unit)
-            else:
-                value = int(value)
-            unit = 0
-        except ValueError:
-            pass
-        settings[name] = (value + unit) if value != '' else True
-    cstr = '/'.join(reversed(comment))
-    if cstr:
-        settings['comment'] = cstr
-    return settings
-
-
-def _flimbox_decode(
-    data: Any,
-    bins_out: Any,
-    times_out: Any,
-    markers_out: Any,
-    windows: Any,
-    pdiv: Any,
-    harmonics: Any,
-    decoder_table: Any,
-    tcc_mask: Any,
-    tcc_shr: Any,
-    pcc_mask: Any,
-    pcc_shr: Any,
-    marker_mask: Any,
-    marker_shr: Any,
-    win_mask: Any,
-    win_shr: Any,
-) -> None:
-    """Decode FLIMbox data stream.
-
-    See the documentation of the FlimboxFbd class for parameter descriptions
-    and the lfdfiles.pyx file for a faster implementation.
-
-    """
-    # this implementation is for reference only. Do not use
-    from ._lfdfiles import flimbox_decode  # noqa
-
-    tcc = data & tcc_mask  # cross correlation time
-    if tcc_shr:
-        tcc >>= tcc_shr
-    times_out[:] = tcc
-    times_out[times_out == 0] = (tcc_mask >> tcc_shr) + 1
-    times_out[0] = 0
-    times_out[1:] -= tcc[:-1]
-    del tcc
-    numpy.cumsum(times_out, out=times_out)
-
-    markers = data & marker_mask
-    markers = numpy.diff(markers.view(numpy.int16))
-    markers = numpy.where(markers > 0)[0]  # trigger up
-    markers += 1
-    size = min(len(markers), len(markers_out))
-    markers_out[:size] = markers[:size]
-    del markers
-
-    if win_mask != 0xFFFF:  # window index
-        win = data & win_mask
-        win >>= win_shr
-    else:
-        win = data >> win_shr
-    win = decoder_table.take(win, axis=1)
-    nophoton = win == -1
-    pmax = (pcc_mask >> pcc_shr + 1) // harmonics
-    win *= pmax // windows * harmonics
-    pcc = data & pcc_mask  # cross correlation phase
-    if pcc_shr:
-        pcc >>= pcc_shr
-    win += pcc
-    del pcc
-    win %= pmax
-    win += 1 - pmax
-    numpy.negative(win, win)
-    if pdiv > 1:
-        win //= pdiv
-    win = win.astype(numpy.int8)
-    win[nophoton] = -1
-    bins_out[:] = win
-
-
-def _flimbox_histogram(
-    bins: Any,
-    times: Any,
-    frame_markers: Any,
-    units_per_sample: Any,
-    scanner_frame_start: Any,
-    out: Any,
-) -> None:
-    """Calculate histograms from decoded FLIMbox data and frame markers.
-
-    See the documentation of the FlimboxFbd class for parameter descriptions
-    and the _lfdfiles.pyx file for a much faster implementation.
-
-    """
-    # this implementation is for reference only. Do not use
-    from ._lfdfiles import flimbox_histogram  # noqa
-
-    nframes, nchannels, frame_length, nwindows = out.shape
-    for f, (j, k) in enumerate(frame_markers):
-        f = f % nframes
-        t = times[j:k] - times[j]
-        t /= units_per_sample  # index into flattened array
-        if scanner_frame_start:
-            t -= scanner_frame_start
-        t = t.astype(numpy.uint32, copy=False)
-        numpy.clip(t, 0, frame_length - 1, out=t)
-        for c in range(nchannels):
-            d = bins[c, j:k]
-            for w in range(nwindows):
-                x = numpy.where(d == w)[0]
-                x = t.take(x)
-                x = numpy.bincount(x, minlength=frame_length)
-                out[f, c, :, w] += x
-
-
-try:
-    from ._lfdfiles import flimbox_decode, flimbox_histogram, sflim_decode
-except ImportError:
-
-    def flimbox_histogram(*args: Any, **kwargs: Any) -> None:
-        """Raise ImportError: No module named '_lfdfiles'."""
-        from ._lfdfiles import flimbox_histogram  # noqa
-
-    def flimbox_decode(*args: Any, **kwargs: Any) -> None:
-        """Raise ImportError: No module named '_lfdfiles'."""
-        from ._lfdfiles import flimbox_decode  # noqa
-
-    def sflim_decode(*args: Any, **kwargs: Any) -> None:
-        """Raise ``ImportError: No module named '_sflim'``."""
-        from ._lfdfiles import sflim_decode  # noqa
-
-
-# deprecated alisases
-SimfcsFbd = FlimboxFbd
-SimfcsFbf = FlimboxFbf
-simfcsfbd_histogram = flimbox_histogram
-simfcsfbd_decode = flimbox_decode
 
 
 class GlobalsLif(LfdFile):
@@ -4410,7 +3029,7 @@ class GlobalsAscii(LfdFile):
     Globals ASCII files contain array and meta data of a single frequency
     domain lifetime measurement, stored as human readable ASCII string.
     Consecutive measurements are stored in separate files with increasing file
-    extension numbers. The format is also used by ISS and FLOP software.
+    extension numbers. The format is also used by ISS and FLOP97 software.
 
     The metadata can be accessed via dictionary `getitem` interface.
     Keys are lower case with spaces replaced by underscores.
@@ -5048,7 +3667,7 @@ class FlimfastFlif(LfdFile):
         for i in range(p):
             data[i] = numpy.fromfile(self._fh, self.dtype, h * w)
             self._fh.seek(64, 1)
-        data.shape = self.shape
+        data.shape = self.shape  # type: ignore[assignment]
         return data
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
@@ -6536,144 +5155,6 @@ class TiffFile(LfdFile):
     def __getattr__(self, name: str, /) -> Any:
         """Return attribute from underlying TiffFile object."""
         return getattr(self._tif, name)
-
-
-def convert_fbd2b64(
-    fbdfile: str | os.PathLike[Any],
-    /,
-    b64files: str = '{filename}_c{channel:02}t{frame:04}.b64',
-    *,
-    show: bool = True,
-    verbose: bool = True,
-    integrate_frames: int = 0,
-    square_frame: bool = True,
-    pdiv: int = -1,
-    laser_frequency: float = -1,
-    laser_factor: float = -1.0,
-    pixel_dwell_time: float = -1.0,
-    frame_size: int = -1,
-    scanner_line_length: int = -1,
-    scanner_line_start: int = -1,
-    scanner_frame_start: int = -1,
-    cmap: str = 'turbo',
-) -> None:
-    """Convert SimFCS FLIMbox data file to B64 files.
-
-    Parameters:
-        fbdfile:
-            FLIMbox data file to convert.
-        b64files:
-            Format string for B64 output file names.
-        show:
-            If True, plot the decoded frames.
-            If False, one B64 files is written for each frame and channel.
-        verbose:
-            Print detailed information about file and conversion.
-        integrate_frames:
-            Specifies which frames to sum. By default, no frames are summed.
-        square_frame:
-            If True, return square image (frame_size x frame_size).
-            Else return full scanner frame.
-        pdiv:
-            Divisor to reduce number of entries in phase histogram.
-        laser_frequency:
-            Laser frequency in Hz.
-        laser_factor:
-            Factor to correct dwell_time/laser_frequency.
-        pixel_dwell_time:
-            Number of microseconds the scanner remains at each pixel.
-        frame_size:
-            Number of pixels in one line scan, excluding retrace.
-        scanner_line_length:
-            Number of pixels in each line, including retrace.
-        scanner_line_start:
-            Index of first valid pixel in scan line.
-        scanner_frame_start:
-            Index of first valid pixel after marker.
-        cmap:
-            Matplotlib colormap for plotting images.
-
-    """
-    prints: Any = print if verbose else nullfunc
-
-    with FlimboxFbd(
-        fbdfile,
-        pdiv=pdiv,
-        laser_frequency=laser_frequency,
-        laser_factor=laser_factor,
-        pixel_dwell_time=pixel_dwell_time,
-        frame_size=frame_size,
-        scanner_line_length=scanner_line_length,
-        scanner_line_start=scanner_line_start,
-        scanner_frame_start=scanner_frame_start,
-    ) as fbd:
-        prints(fbd)
-        decoded = fbd.decode()
-        bins, times, markers = decoded
-        # prints(decoded)
-        frames = fbd.frames(decoded)
-        # prints(frames)
-        image = fbd.asimage(
-            decoded,
-            frames,
-            integrate_frames=integrate_frames,
-            square_frame=square_frame,
-        )
-        # prints(image)
-        image = numpy.moveaxis(image, -1, 2)
-        times_ = times / (fbd.laser_frequency * fbd.laser_factor)
-        if show:
-            from matplotlib import pyplot
-            from tifffile import imshow
-
-            pyplot.figure()
-            pyplot.title('Bins and Markers')
-            pyplot.xlabel('time (s)')
-            pyplot.ylabel('Cross correlation phase index')
-            pyplot.plot(times_, bins[0], '.', alpha=0.5, label='Ch0')
-            pyplot.vlines(
-                x=times_[markers],
-                ymin=-1,
-                ymax=1,
-                colors='red',
-                label='Markers',
-            )
-            pyplot.legend()
-
-            pyplot.figure()
-            pyplot.title('Cross correlation phase histogram')
-            pyplot.xlabel('Bin')
-            pyplot.ylabel('Counts')
-            bins_channel: Any  # for mypy
-            for ch, bins_channel in enumerate(decoded[0]):
-                histogram = numpy.bincount(bins_channel[bins_channel >= 0])
-                pyplot.plot(histogram, label=f'Ch{ch}')
-            pyplot.legend()
-
-            if not integrate_frames and image.shape[0] > 1:
-                image = numpy.moveaxis(image, 0, 1)
-                title = 'Photons[Channel, Frame, Bin, Y, X]'
-            else:
-                title = 'Photons[Channel, Bin, Y, X]'
-            imshow(
-                image,
-                vmax=None,
-                photometric='minisblack',
-                cmap=cmap,
-                title=title,
-            )
-            pyplot.show()
-        else:
-            prints()
-            for j in range(image.shape[0]):
-                for i in range(image.shape[1]):
-                    b64name = b64files.format(
-                        filename=fbdfile, channel=i, frame=j
-                    )
-                    prints(b64name, flush=True)
-                    simfcsb64_write(
-                        b64name, image[j, i].astype(numpy.int16, copy=False)
-                    )
 
 
 def convert2tiff(
