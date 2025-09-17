@@ -1,6 +1,16 @@
 Revisions
 ---------
 
+2025.9.17
+
+- Many breaking changes to FLIMbox functionality (use fbdfile package instead):
+- Discourage use of FlimboxFbd, FlimboxFbf, and FlimboxFbs classes.
+- Use fbdfile package to implement FlimboxFbd, FlimboxFbf, and FlimboxFbs.
+- Remove flimbox_histogram, flimbox_decode, and sflim_decode functions.
+- Remove convert_fbd2b64 function and fbd2b64 command line app.
+- Remove deprecated SimfcsFbf, and SimfcsFbd classes.
+- Remove deprecated simfcsfbd_histogram and simfcsfbd_decode functions.
+
 2025.7.31
 
 - Read variants of SimFCS REF files.
