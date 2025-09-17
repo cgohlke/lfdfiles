@@ -2,16 +2,12 @@
 
 """Lfdfiles package Setuptools script."""
 
-import os
 import re
 import sys
 
-import numpy
-from setuptools import Extension, setup
+from setuptools import setup
 
 buildnumber = ''
-
-DEBUG = bool(os.environ.get('LFDFILES_DEBUG', False))
 
 
 def search(pattern: str, string: str, flags: int = 0) -> str:
@@ -88,35 +84,6 @@ if 'sdist' in sys.argv:
         fh.write(revisions.strip())
         fh.write(old)
 
-if DEBUG:
-    extra_compile_args = ['/Zi', '/Od']
-    extra_link_args = ['-debug:full']
-elif sys.platform == 'win32':
-    extra_compile_args = ['/openmp']
-    extra_link_args = []
-elif sys.platform == 'darwin':
-    # https://mac.r-project.org/openmp/
-    extra_compile_args = ['-Xclang', '-fopenmp']
-    extra_link_args = ['-lomp']
-else:
-    extra_compile_args = ['-fopenmp']
-    extra_link_args = ['-fopenmp']
-
-ext_modules = [
-    Extension(
-        'lfdfiles._lfdfiles',
-        ['lfdfiles/_lfdfiles.pyx'],
-        define_macros=[
-            # ('CYTHON_TRACE_NOGIL', '1'),
-            # ('CYTHON_LIMITED_API', '1'),
-            # ('Py_LIMITED_API', '1'),
-            ('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'),
-        ],
-        extra_compile_args=extra_compile_args,
-        extra_link_args=extra_link_args,
-        include_dirs=[numpy.get_include()],
-    ),
-]
 
 setup(
     name='lfdfiles',
@@ -135,33 +102,26 @@ setup(
     },
     packages=['lfdfiles'],
     package_data={'lfdfiles': ['py.typed']},
-    entry_points={
-        'console_scripts': [
-            'lfdfiles = lfdfiles.__main__:main',
-            'fbd2b64 = lfdfiles.fbd2b64:main',
-        ]
-    },
+    entry_points={'console_scripts': ['lfdfiles = lfdfiles.__main__:main']},
     python_requires='>=3.11',
     install_requires=['numpy', 'tifffile', 'click'],
-    setup_requires=['setuptools', 'numpy'],
     extras_require={
         'all': [
             'imagecodecs',
             'matplotlib',
+            'fbdfile',
             'czifile',
             'oiffile',
             'netpbmfile',
         ],
     },
-    ext_modules=ext_modules,
-    zip_safe=False,
+    zip_safe=True,
     platforms=['any'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
-        'Programming Language :: Cython',
         'Programming Language :: Python :: 3 :: Only',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
