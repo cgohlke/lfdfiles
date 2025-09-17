@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.7.31
+:Version: 2025.9.17
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +49,30 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.5, 3.14.0rc 64-bit
-- `Cython <https://pypi.org/project/cython/>`_ 3.1.2 (build)
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.2
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.6.11 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc 64-bit
+- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.3
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.9.9 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.9.17 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
 - `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.5.10 (optional)
 - `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.5
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.6
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.2.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.9.17
+
+- Many breaking changes to FLIMbox functionality (use fbdfile package instead):
+- Discourage use of FlimboxFbd, FlimboxFbf, and FlimboxFbs classes.
+- Use fbdfile package to implement FlimboxFbd, FlimboxFbf, and FlimboxFbs.
+- Remove flimbox_histogram, flimbox_decode, and sflim_decode functions.
+- Remove convert_fbd2b64 function and fbd2b64 command line app.
+- Remove deprecated SimfcsFbf, and SimfcsFbd classes.
+- Remove deprecated simfcsfbd_histogram and simfcsfbd_decode functions.
 
 2025.7.31
 
@@ -128,13 +138,9 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.9 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.10 is no longer supported. 32-bit versions are deprecated.
 
-The latest `Microsoft Visual C++ Redistributable for Visual Studio 2015-2022
-<https://learn.microsoft.com/en-US/cpp/windows/latest-supported-vc-redist>`_
-is required on Windows.
-
-Many of the LFD's file formats are not documented and might change arbitrarily.
+Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
 No guarantee can be made as to the correctness of code and documentation.
 
@@ -143,6 +149,10 @@ available in separate, human readable journal files (`.jrn`).
 
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
+
+The Laboratory for Fluorescence Dynamics (LFD) was a national research
+resource center for biomedical fluorescence spectroscopy funded by the
+National Institutes of Health from 1986 to 2022 (grant P41GM103540).
 
 References
 ----------
@@ -160,17 +170,17 @@ The following software is referenced in this module:
 4.  `FlimFast <https://www.cgohlke.com/flimfast/>`_ is software for
     frequency-domain, full-field, fluorescence lifetime imaging at video
     rate, developed by Christoph Gohlke at UIUC.
-5.  FLImage is software for frequency-domain, full-field, fluorescence
-    lifetime imaging, developed by Christoph Gohlke at UIUC.
-    Implemented in LabVIEW.
+5.  `FLImage <https://www.cgohlke.com/#software>`_ is software for
+    frequency-domain, full-field, fluorescence lifetime imaging, developed
+    by Christoph Gohlke at UIUC. Implemented in LabVIEW.
 6.  FLIez is software for frequency-domain, full-field, fluorescence
     lifetime imaging, developed by Glen Redford at UIUC.
 7.  Flie is software for frequency-domain, full-field, fluorescence
     lifetime imaging, developed by Peter Schneider at MPIBPC.
     Implemented on a Sun UltraSPARC.
-8.  FLOP is software for frequency-domain, cuvette, fluorescence lifetime
-    measurements, developed by Christoph Gohlke at MPIBPC.
-    Implemented in LabVIEW.
+8.  `FLOP97 <https://www.cgohlke.com/#software>`__ is software for
+    frequency-domain, cuvette, fluorescence lifetime measurements, developed
+    by Christoph Gohlke at MPIBPC. Implemented in LabVIEW.
 9.  `VistaVision <http://www.iss.com/microscopy/software/vistavision.html>`_
     is commercial software for instrument control, data acquisition and data
     processing by ISS Inc (Champaign, IL).
