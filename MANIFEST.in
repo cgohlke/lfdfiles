@@ -4,17 +4,14 @@ include CHANGES.rst
 include pyproject.toml
 
 include lfdfiles/py.typed
-include lfdfiles/_lfdfiles.c
-include lfdfiles/_lfdfiles.pyx
 
 include tests/test_lfdfiles.py
 include docs/conf.py
 include docs/index.rst
 include docs/_static/custom.css
 
-include .github/workflows/wheel.yml
-
 exclude *.cmd
+exclude *.yaml
 recursive-exclude doc *
 recursive-exclude docs *
 recursive-exclude test *
