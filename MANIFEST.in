@@ -10,8 +10,11 @@ include docs/conf.py
 include docs/index.rst
 include docs/_static/custom.css
 
+exclude .env
 exclude *.cmd
 exclude *.yaml
+exclude mypy.ini
+exclude ruff.toml
 recursive-exclude doc *
 recursive-exclude docs *
 recursive-exclude test *
