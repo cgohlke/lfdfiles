@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.9.17
+:Version: 2025.12.12
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +76,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc 64-bit
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.3
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.9.9 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.9.17 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.3.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.12.12 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.12.12 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.5.10 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.6
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.12.12 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.12.12 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.7
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.2.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.12.12
+
+- Derive LfdFileError from ValueError.
+- Improve code quality.
 
 2025.9.17
 
@@ -248,60 +253,60 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2025.9.17'
+__version__ = '2025.12.12'
 
 __all__ = [
-    '__version__',
-    'LfdFile',
-    'LfdFileSequence',
-    'LfdFileError',
-    'RawPal',
-    'SimfcsVpl',
-    'SimfcsVpp',
-    'SimfcsJrn',
-    'SimfcsBin',
-    'SimfcsRaw',
-    'SimfcsInt',
-    'SimfcsIntPhsMod',
-    'SimfcsFit',
-    'SimfcsCyl',
-    'SimfcsRef',
-    'SimfcsBh',
-    'SimfcsBhz',
-    'SimfcsB64',
-    'SimfcsI64',
-    'SimfcsZ64',
-    'SimfcsR64',
-    'SimfcsGpSeries',
+    'BioradPic',
+    'Ccp4Map',
+    'CziFile',
+    'FlieOut',
+    'FliezDb2',
+    'FliezI16',
+    'FlimageBin',
     'FlimboxFbd',
     'FlimboxFbf',
     'FlimboxFbs',
-    'GlobalsLif',
-    'GlobalsAscii',
-    'VistaIfli',
-    'VistaIfi',
-    'Ccp4Map',
-    'Vaa3dRaw',
-    'VoxxMap',
-    'BioradPic',
     'FlimfastFlif',
-    'FlimageBin',
-    'FlieOut',
-    'FliezI16',
-    'FliezDb2',
+    'GlobalsAscii',
+    'GlobalsLif',
+    'LfdFile',
+    'LfdFileError',
+    'LfdFileSequence',
     'NetpbmFile',
     'OifFile',
-    'CziFile',
+    'RawPal',
+    'SimfcsB64',
+    'SimfcsBh',
+    'SimfcsBhz',
+    'SimfcsBin',
+    'SimfcsCyl',
+    'SimfcsFit',
+    'SimfcsGpSeries',
+    'SimfcsI64',
+    'SimfcsInt',
+    'SimfcsIntPhsMod',
+    'SimfcsJrn',
+    'SimfcsR64',
+    'SimfcsRaw',
+    'SimfcsRef',
+    'SimfcsVpl',
+    'SimfcsVpp',
+    'SimfcsZ64',
     'TiffFile',
+    'Vaa3dRaw',
+    'VistaIfi',
+    'VistaIfli',
+    'VoxxMap',
+    '__version__',
+    'bioradpic_write',
+    'ccp4map_write',
     'convert2tiff',
     'simfcsb64_write',
     'simfcsi64_write',
-    'simfcsz64_write',
     'simfcsr64_write',
-    'ccp4map_write',
+    'simfcsz64_write',
     'vaa3draw_write',
     'voxxmap_write',
-    'bioradpic_write',
 ]
 
 import copy
@@ -331,8 +336,8 @@ from tifffile import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
-    from types import ModuleType
-    from typing import Any, ClassVar, Literal, TypeVar
+    from types import ModuleType, TracebackType
+    from typing import Any, ClassVar, Literal, Self, TypeVar
 
     from matplotlib.figure import Figure
     from numpy.typing import ArrayLike, DTypeLike, NDArray
@@ -342,10 +347,10 @@ pyplot: ModuleType | None = None
 cycler: ModuleType | None = None
 
 
-def import_pyplot(fail: bool = True, /) -> bool:
+def import_pyplot(*, fail: bool = True) -> bool:
     """Import `matplotlib.pyplot`."""
-    global pyplot
-    global cycler
+    global pyplot  # noqa: PLW0603
+    global cycler  # noqa: PLW0603
 
     if pyplot is not None:
         return True
@@ -362,7 +367,7 @@ def import_pyplot(fail: bool = True, /) -> bool:
     return True
 
 
-class LfdFileError(Exception):
+class LfdFileError(ValueError):
     """Exception to indicate invalid LFD files.
 
     Parameters:
@@ -378,13 +383,13 @@ class LfdFileError(Exception):
             arg = f'invalid {arg.__class__.__name__} file'
         if msg:
             arg = f'{arg}: {msg}' if arg else msg
-        Exception.__init__(self, arg)
+        ValueError.__init__(self, arg)
 
 
 class LfdFileRegistry(type):
     """Metaclass to register classes derived from LfdFile."""
 
-    classes: list[type[LfdFile]] = []
+    classes: ClassVar[list[type[LfdFile]]] = []
     """Registered LfdFile classes."""
 
     def __new__(
@@ -503,7 +508,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         filename: os.PathLike[Any] | str,
         /,
         **kwargs: Any,
-    ) -> LfdFile:
+    ) -> Self:
         """Return LfdFile derived class that can open filename."""
         if cls is not LfdFile:
             return object.__new__(cls)
@@ -570,7 +575,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         if components_:
             self._fh = None
             # verify file name is a component
-            for label, fname in components_:
+            for _label, fname in components_:
                 if fname.lower() == self._filename.lower():
                     break
             else:
@@ -578,15 +583,14 @@ class LfdFile(metaclass=LfdFileRegistry):
             # try to open file using all registered classes
             component_list: list[tuple[str, LfdFile]] = []
             for label, fname in components_:
-                fname = os.path.join(self._filepath, fname)
                 try:
                     lfdfile = self.__class__(
-                        fname,
+                        os.path.join(self._filepath, fname),
                         validate=validate,
                         components=False,
                         _offset=_offset,
                     )
-                except Exception:  # LfdFileError, FileNotFoundError
+                except Exception:  # noqa: S112
                     continue
                 component_list.append((label, lfdfile))
             if not component_list:
@@ -600,21 +604,20 @@ class LfdFile(metaclass=LfdFileRegistry):
                 self.axes = 'S' + component_list[0][1].axes
         else:
             self.components = []
-            self._fh = open(
+            self._fh = open(  # noqa: SIM115
                 filename, self._filemode, encoding=self._fileencoding
             )
             self._fh.seek(_offset)
             try:
-                if self._filesizemin != len(self._fh.read(self._filesizemin)):
-                    raise LfdFileError(self, 'file is too small')
-            except LfdFileError:
-                self._fh.close()
-                self._fh = None
-                raise
+                size = len(self._fh.read(self._filesizemin))
             except Exception as exc:
                 self._fh.close()
                 self._fh = None
                 raise LfdFileError(self, 'not a text file') from exc
+            if size != self._filesizemin:
+                self._fh.close()
+                self._fh = None
+                raise LfdFileError(self, 'file is too small')
 
             self._fh.seek(_offset)
             try:
@@ -648,10 +651,15 @@ class LfdFile(metaclass=LfdFileRegistry):
             s.append(_str)
         return indent(*s)
 
-    def __enter__(self: LfdFileType) -> LfdFileType:
+    def __enter__(self: LfdFileType) -> LfdFileType:  # noqa: PYI019
         return self
 
-    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self.close()
 
     def close(self) -> None:
@@ -662,7 +670,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         """
         try:
             self._close()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         if self._fh:
             self._fh.close()
@@ -727,7 +735,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         figure = pyplot.figure(facecolor='w', **self._figureargs)
         try:
             figure.canvas.manager.window.title('LfdFiles - ' + self._filename)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         self._plot(figure, **kwargs)
         pyplot.show()
@@ -785,7 +793,7 @@ class LfdFile(metaclass=LfdFileRegistry):
                 data = data[0]  # type: ignore[unreachable]
             ndim = data.ndim
         except Exception as exc:
-            warnings.warn(str(exc))
+            warnings.warn(str(exc), stacklevel=2)
             ndim = None
         if ndim == 1:
             # plot line and histogram
@@ -1014,7 +1022,7 @@ class RawPal(LfdFile):
     """
 
     _filepattern = r'.*\.(pal|raw|bin|lut)$'
-    _figureargs = {'figsize': (6, 1)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 1)}
 
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 768 or 1024."""
@@ -1103,7 +1111,7 @@ class SimfcsVpl(LfdFile):
     """
 
     _filepattern = r'.*\.vpl$'
-    _figureargs = {'figsize': (6, 1)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 1)}
 
     name: str | None
     """Name of palette."""
@@ -1398,27 +1406,26 @@ class SimfcsJrn(LfdFile):
         self._records = []
         for record in content.split('*' * 80):
             recdict = {}
-            record = record.split('COMMENTS', 1)
-            if len(record) > 1:
-                record, comments = record
+            rec = record.split('COMMENTS', 1)
+            if len(rec) > 1:
+                rec, comments = rec
             else:
-                record, comments = record[0], ''
+                rec, comments = rec[0], ''
             recdict['comments' if lower else 'COMMENTS'] = comments.strip(
                 '* :;=\n\r\t'
             )
-            record = re.split(r'[*]{5}([\w\s]+)[*]{5}', record)
-            for key, value in zip(record[1::2], record[2::2]):
+            rec = re.split(r'[*]{5}([\w\s]+)[*]{5}', rec)
+            for item in zip(rec[1::2], rec[2::2], strict=True):
+                key, value = item
                 newdict: dict[str, Any] = {}
                 key = key.strip('* :;=\n\r\t')
                 if lower:
                     key = key.lower()
                 value = self._parse_journal(
-                    value, self._keys, result=newdict, lower=lower
+                    value, self._keys, newdict, lower=lower
                 )
                 recdict[key] = newdict
-            self._parse_journal(
-                record[0], self._keys, result=recdict, lower=lower
-            )
+            self._parse_journal(record[0], self._keys, recdict, lower=lower)
             self._records.append(recdict)
         self.close()
 
@@ -1435,17 +1442,18 @@ class SimfcsJrn(LfdFile):
         journal: str,
         repattern: re.Pattern[str],
         result: dict[str, Any] | None,
+        *,
         lower: bool,
     ) -> dict[str, Any]:
         """Return dictionary of keys and values in journal string."""
+        # TODO: the last value is not parsed!
         if result is None:
             result = {}
-
         keyval = re.split(repattern, journal, maxsplit=0)
-        keyval = list(s.strip('* :;=\n\r\t') for s in keyval)
+        keyval = [s.strip('* :;=\n\r\t') for s in keyval]
         val = [astype(re.sub(SimfcsJrn._skip, '', v)) for v in keyval[2:-1:2]]
         key = [k.lower() if lower else k for k in keyval[1:-1:2]]
-        result.update(zip(key, val))
+        result.update(zip(key, val, strict=False))
         return result
 
     def _str(self) -> str | None:
@@ -1529,20 +1537,14 @@ class SimfcsBin(LfdFile):
             shapes = [(256, 256), (-1, 256, 256), (128, 128), (64, 64)]
         else:
             shapes = [shape]
-        if dtype is None:
-            dtypes = [numpy.uint16, numpy.uint8]
-        else:
-            dtypes = [dtype]
-        for shape, dtype in ((s, d) for s in shapes for d in dtypes):
+        dtypes = [numpy.uint16, numpy.uint8] if dtype is None else [dtype]
+        for s, d in ((s, d) for s in shapes for d in dtypes):
             try:
                 self.shape = determine_shape(
-                    shape,
-                    dtype,
-                    self._filesize - offset,
-                    validate=validate_size,
+                    s, d, self._filesize - offset, validate=validate_size
                 )
                 break
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         else:
             raise LfdFileError(self, 'shape and dtype do not match file size')
@@ -1646,7 +1648,7 @@ class SimfcsIntPhsMod(LfdFile):
     """
 
     _filepattern = r'.*\.(int|phs|mod)$'
-    _figureargs = {'figsize': (6, 8)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 8)}
 
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 256 KB."""
@@ -1684,7 +1686,12 @@ class SimfcsIntPhsMod(LfdFile):
             pyplot.subplot2grid((3, 2), (2, 1)),
         ]
         for i, (img, ax, title) in enumerate(
-            zip(images, axes, (self._filename + ' - int', 'phs', 'mod'))
+            zip(
+                images,
+                axes,
+                (self._filename + ' - int', 'phs', 'mod'),
+                strict=True,
+            )
         ):
             ax.set_title(title)
             if i == 0:
@@ -1838,7 +1845,7 @@ class SimfcsCyl(LfdFile):
     """
 
     _filepattern = r'.*\.cyl$'
-    _figureargs = {'figsize': (6, 3)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 3)}
 
     def _init(
         self, *, shape: tuple[int, int, int] = (2, -1, 256), **kwargs: Any
@@ -1927,7 +1934,7 @@ class SimfcsRef(LfdFile):
     """
 
     _filepattern = r'.*\.ref$'
-    _figureargs = {'figsize': (6, 11)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 11)}
 
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is as expected."""
@@ -1963,7 +1970,12 @@ class SimfcsRef(LfdFile):
             pyplot.subplot2grid((4, 2), (3, 1)),
         ]
         for i, (img, ax, title) in enumerate(
-            zip(images, axes, (self._filename, 'ph1', 'md1', 'ph2', 'md2'))
+            zip(
+                images,
+                axes,
+                (self._filename, 'ph1', 'md1', 'ph2', 'md2'),
+                strict=True,
+            )
         ):
             ax.set_title(title)
             if i == 0:
@@ -1975,7 +1987,9 @@ class SimfcsRef(LfdFile):
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=True)
-        for image, label in zip(self.asarray(), 'dc ph1 md1 ph2 md2'.split()):
+        for image, label in zip(
+            self.asarray(), ('dc', 'ph1', 'md1', 'ph2', 'md2'), strict=True
+        ):
             tif.write(image, description=label, **kwargs)
 
 
@@ -2029,12 +2043,14 @@ class SimfcsBh(LfdFile):
         # reshape according to axes provided by user
         axes = parse_kwargs(kwargs, axes=None)['axes']
         if axes:
-            shape = {'ZYX': (0, None, 1, 2), 'TYX': (0, None, None, 1, 2)}[
-                axes
-            ]
-            data.shape = tuple(
-                1 if i is None else data.shape[i] for i in shape
+            shape_axes = {
+                'ZYX': (0, None, 1, 2),
+                'TYX': (0, None, None, 1, 2),
+            }[axes]
+            shape = tuple(
+                1 if i is None else data.shape[i] for i in shape_axes
             )
+            data = data.reshape(shape)
         tif.write(data, **kwargs)
 
 
@@ -2127,7 +2143,7 @@ class SimfcsB64(LfdFile):
     def _init(
         self,
         *,
-        dtype: DTypeLike = '<i2',
+        dtype: DTypeLike | None = '<i2',
         maxsize: int = 4096,
         **kwargs: Any,
     ) -> None:
@@ -2156,7 +2172,7 @@ class SimfcsB64(LfdFile):
             self.axes = 'X'
         elif fsize // size > 1:
             # multiple images
-            self.shape = (int(fsize // size),) + self.shape
+            self.shape = (int(fsize // size), *self.shape)
             self.axes = 'IYX'
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.int16]:
@@ -2247,7 +2263,7 @@ class SimfcsI64(LfdFile):
     def _init(
         self,
         *,
-        dtype: DTypeLike = '<f4',
+        dtype: DTypeLike | None = '<f4',
         maxsize: int = 1024,
         **kwargs: Any,
     ) -> None:
@@ -2263,20 +2279,18 @@ class SimfcsI64(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 2D array of float32."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         bufsize = product(self.shape) * self.dtype.itemsize + 4
         rawdata = zlib.decompress(self._fh.read(), 15, bufsize)
         data = numpy.frombuffer(rawdata, self.dtype, offset=4)
         data = data.copy()  # make writable
         try:
-            data.shape = self.shape[0], self.shape[1]
+            data = data.reshape(self.shape[0], self.shape[1])
         except Exception:
             # Z64 format with I64 extension
-            data.shape = -1, self.shape[0], self.shape[1]
+            data = data.reshape(-1, self.shape[0], self.shape[1])
         return data
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
@@ -2369,7 +2383,7 @@ class SimfcsZ64(LfdFile):
     def _init(
         self,
         *,
-        dtype: DTypeLike = '<f4',
+        dtype: DTypeLike | None = '<f4',
         maxsize: tuple[int, int] = (256, 1024),
         doubleheader: bool = False,
         **kwargs: Any,
@@ -2391,11 +2405,9 @@ class SimfcsZ64(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 3D array of float32."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         bufsize = product(self.shape) * self.dtype.itemsize + 16
         rawdata = zlib.decompress(self._fh.read(), 15, bufsize)
         try:
@@ -2414,12 +2426,14 @@ class SimfcsZ64(LfdFile):
         # reshape according to axes provided by user
         axes = parse_kwargs(kwargs, axes=None)['axes']
         if axes:
-            shape = {'ZYX': (0, None, 1, 2), 'TYX': (0, None, None, 1, 2)}[
-                axes
-            ]
-            data.shape = tuple(
-                1 if i is None else data.shape[i] for i in shape
+            shape_axes = {
+                'ZYX': (0, None, 1, 2),
+                'TYX': (0, None, None, 1, 2),
+            }[axes]
+            shape = tuple(
+                1 if i is None else data.shape[i] for i in shape_axes
             )
+            data = data.reshape(shape)
         tif.write(data, **kwargs)
 
 
@@ -2501,7 +2515,7 @@ class SimfcsR64(SimfcsRef):
     def _init(
         self,
         *,
-        dtype: DTypeLike = '<f4',
+        dtype: DTypeLike | None = '<f4',
         maxsize: int = 1024,
         **kwargs: Any,
     ) -> None:
@@ -2518,11 +2532,9 @@ class SimfcsR64(SimfcsRef):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 3D array of float32."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         bufsize = product(self.shape) * self.dtype.itemsize + 4
         rawdata = zlib.decompress(self._fh.read(), bufsize=bufsize)
         data = numpy.frombuffer(rawdata, '<' + self.dtype.char, offset=4)
@@ -2537,8 +2549,8 @@ class SimfcsR64(SimfcsRef):
         label = 'dc'
         for i, image in enumerate(self.asarray()):
             if i > 0:
-                i += 1
-                label = f'ph{i // 2}' if i % 2 else f'md{i // 2}'
+                i1 = i + 1
+                label = f'ph{i1 // 2}' if i1 % 2 else f'md{i1 // 2}'
             tif.write(image, description=label, **kwargs)
 
 
@@ -2610,13 +2622,13 @@ class FlimboxFbd(LfdFile):
     FlimboxFbd is a light wrapper around the fbdfile.FbdFile class.
 
     Examples:
-        >>> with FlimboxFbd('flimbox$CBCO.fbd') as f:
+        >>> with FlimboxFbd('flimbox_data$CBCO.fbd') as f:
         ...     f.laser_frequency
         ...     bins, times, markers = f.decode(
         ...         word_count=500000, skip_words=1900000
         ...     )
         ...
-        20000000
+        20000000.0
         >>> print(bins[0, :2], times[:2], markers)
         [53 51] [ 0 42] [ 44097 124815]
         >>> hist = [numpy.bincount(b[b >= 0]) for b in bins]
@@ -2626,7 +2638,7 @@ class FlimboxFbd(LfdFile):
     """
 
     _filepattern = r'.*\.fbd$'
-    _figureargs = {'figsize': (6, 5)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 5)}
 
     def _init(self, **kwargs: Any) -> None:
         """Initialize instance from file name code or file header."""
@@ -2668,7 +2680,7 @@ class FlimboxFbd(LfdFile):
         ax.set_xlabel('Bin')
         ax.set_ylabel('Counts')
         ax.set_xlim((0, self._fbd.pmax // self._fbd.pdiv - 1))
-        bins, times, markers = self._fbd.decode()
+        bins, _times, _markers = self._fbd.decode()
         bins_channel: Any  # for mypy
         for ch, bins_channel in enumerate(bins):
             histogram = numpy.bincount(bins_channel[bins_channel >= 0])
@@ -2710,7 +2722,7 @@ class FlimboxFbs(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with FlimboxFbs('flimbox.fbs.xml') as f:
+        >>> with FlimboxFbs('flimbox_settings.fbs.xml') as f:
         ...     f['ScanParams']['ExcitationFrequency']
         ...
         20000000
@@ -2785,7 +2797,7 @@ class FlimboxFbf(LfdFile):
             Maximum length of header.
 
     Examples:
-        >>> with FlimboxFbf('flimbox.fbf') as f:
+        >>> with FlimboxFbf('flimbox_firmware.fbf') as f:
         ...     f['windows']
         ...     f['channels']
         ...     f['secondharmonic']
@@ -2934,7 +2946,7 @@ class GlobalsLif(LfdFile):
             if number == 0:
                 continue
             if number > 25:
-                warnings.warn('corrupted record')
+                warnings.warn('corrupted record', stacklevel=2)
                 continue
             record = self.Record()
             record['number'] = number
@@ -2965,7 +2977,8 @@ class GlobalsLif(LfdFile):
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot all phase and modulation vs log of frequency."""
-        assert pyplot is not None and cycler is not None
+        assert pyplot is not None
+        assert cycler is not None
         maxplots = 50
         colors: list[str] = []
         for c in (
@@ -3048,7 +3061,7 @@ class GlobalsAscii(LfdFile):
     _filemode = 'r'
     _fileencoding = 'cp1252'
     _filepattern = r'.*\.(\d){3}$'
-    _figureargs = {'figsize': (6, 5)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 5)}
 
     _record: dict[str, Any]
 
@@ -3066,7 +3079,8 @@ class GlobalsAscii(LfdFile):
         matches = re.findall(
             r'(.*?)(?:\((.*)\))?:\s(.*)', content, re.IGNORECASE
         )
-        for key, unit, value in matches:
+        for match in matches:
+            key, unit, value = match
             key = key.lower().strip().replace(' ', '_')
             unit = unit.strip()
             value = astype(value.strip())
@@ -3089,14 +3103,14 @@ class GlobalsAscii(LfdFile):
                 raise
             data_list: list[float] = []
             for line in datastr.splitlines():
-                line = line.split('.')
+                items = line.split('.')
                 data_list.extend(
                     (
-                        float(line[0][0:] + '.' + line[1][:7]),
-                        float(line[1][7:] + '.' + line[2][:3]),
-                        float(line[2][3:] + '.' + line[3][:3]),
-                        float(line[3][3:] + '.' + line[4][:3]),
-                        float(line[4][3:] + '.' + line[5]),
+                        float(items[0][0:] + '.' + items[1][:7]),
+                        float(items[1][7:] + '.' + items[2][:3]),
+                        float(items[2][3:] + '.' + items[3][:3]),
+                        float(items[3][3:] + '.' + items[4][:3]),
+                        float(items[4][3:] + '.' + items[5]),
                     )
                 )
             data = numpy.array(data_list, dtype=numpy.float32)
@@ -3211,7 +3225,7 @@ class VistaIfi(LfdFile):
             self.axes = 'ZYX'
         indices = self.channel_indices
         if len(indices) > 1:
-            self.shape = (len(indices),) + self.shape
+            self.shape = (len(indices), *self.shape)
             self.axes = 'C' + self.axes
         self.dtype = numpy.dtype(numpy.float32)
 
@@ -3227,11 +3241,9 @@ class VistaIfi(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image data from file."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         self._fh.seek(256)
         data = numpy.fromfile(self._fh, '<f4', product(self.shape))
         data.shape = self.shape
@@ -3288,7 +3300,7 @@ class VistaIfli(LfdFile):
     """
 
     _filepattern = r'.*\.ifli$'
-    _figureargs = {'figsize': (8, 7.5)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 7.5)}
 
     header: dict[str, Any]
     """Metadata from file header."""
@@ -3329,8 +3341,7 @@ class VistaIfli(LfdFile):
         fields['FrameRepeat'] = 'H'
         read_record(header, fields, fh)
 
-        if header['FrameRepeat'] < 1:
-            header['FrameRepeat'] = 1
+        header['FrameRepeat'] = max(header['FrameRepeat'], 1)
 
         sizex, sizey, sizez, sizec, sizet = header['XYZCTsize']
         sizef = header['ModFrequencyCount']
@@ -3477,7 +3488,8 @@ class VistaIfli(LfdFile):
         imaginary (s) parts of the phasor.
 
         """
-        assert self._fh is not None and self.shape is not None
+        assert self._fh is not None
+        assert self.shape is not None
         offset = self.offsets['PhasorPixelData']
         if memmap:
             return numpy.memmap(
@@ -3490,8 +3502,7 @@ class VistaIfli(LfdFile):
             )
         self._fh.seek(offset)
         phasor = numpy.fromfile(self._fh, '<f4', product(self.shape))
-        phasor.shape = self.shape
-        return phasor
+        return phasor.reshape(self.shape)
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
@@ -3567,7 +3578,7 @@ class FlimfastFlif(LfdFile):
     """
 
     _filepattern = r'.*\.flif$'
-    _figureargs = {'figsize': (6, 7)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 7)}
 
     header: numpy.recarray[Any, Any]
     """File header."""
@@ -3656,19 +3667,16 @@ class FlimfastFlif(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16]:
         """Return images as uint16 array of shape (records, height, width)."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         p, h, w = self.shape
         data = numpy.empty((p, h * w), numpy.uint16)
         self._fh.seek(640 + 64)
         for i in range(p):
             data[i] = numpy.fromfile(self._fh, self.dtype, h * w)
             self._fh.seek(64, 1)
-        data.shape = self.shape  # type: ignore[assignment]
-        return data
+        return data.reshape(self.shape)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write phase images and metadata to TIFF file."""
@@ -3681,11 +3689,11 @@ class FlimfastFlif(LfdFile):
         }
         for name, dtype in self.header.dtype.fields.items():
             if name not in {'_', 'magic'}:
-                dtype = dtypes[dtype[0].kind]
-                metadata[name] = dtype(self.header[name])
+                metadata[name] = dtypes[dtype[0].kind](self.header[name])
         for name, dtype in self.records.dtype.fields.items():
-            dtype = dtypes[dtype[0].kind]
-            metadata[name] = list(dtype(i) for i in self.records[name])
+            metadata[name] = [
+                dtypes[dtype[0].kind](i) for i in self.records[name]
+            ]
         update_kwargs(kwargs, contiguous=True, metadata=metadata)
         for data in self.asarray():
             tif.write(data, **kwargs)
@@ -3728,7 +3736,7 @@ class FlimageBin(LfdFile):
     """
 
     _filepattern = r'.*\.(int|mod|phi|tmd|tph)\.bin$'
-    _figureargs = {'figsize': (6, 7)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 7)}
 
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 264000."""
@@ -3769,6 +3777,7 @@ class FlimageBin(LfdFile):
                 images,
                 axes,
                 (self._filename + ' - ' + name[0], name[1], name[2]),
+                strict=True,
             )
         ):
             ax.set_title(title)
@@ -3809,7 +3818,7 @@ class FlieOut(LfdFile):
     """
 
     _filepattern = r'(off|phi|mod)_.*\.out$'
-    _figureargs = {'figsize': (6, 7)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 7)}
 
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 264000."""
@@ -3847,7 +3856,12 @@ class FlieOut(LfdFile):
             pyplot.subplot2grid((3, 2), (2, 1)),
         ]
         for i, (img, ax, title) in enumerate(
-            zip(images, axes, (self._filename + ' - Off', 'Phi', 'Mod'))
+            zip(
+                images,
+                axes,
+                (self._filename + ' - Off', 'Phi', 'Mod'),
+                strict=True,
+            )
         ):
             ax.set_title(title)
             if i > 0:
@@ -3983,7 +3997,7 @@ class BioradPic(LfdFile):
 
     _filepattern = r'.*\.pic$'
     _filesizemin = 76
-    _figureargs = {'figsize': (8, 6)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
 
     header: dict[str, Any]
     """Select values of header structure."""
@@ -4022,20 +4036,20 @@ class BioradPic(LfdFile):
         ) = struct.unpack('<hhhhhIhh32shHHhhHhhf6x', self._fh.read(76))
         if file_id != 12345:
             raise LfdFileError(self)
-        self.header = dict(
-            name=bytes2str(name).strip(),
-            ramp1_min=ramp1_min,
-            ramp1_max=ramp1_max,
-            color1=color1,
-            ramp2_min=ramp2_min,
-            ramp2_max=ramp2_max,
-            color2=color2,
-            image_number=image_number,
-            lens=lens,
-            mag_factor=mag_factor,
-            edited=edited,
-            merged=merged,
-        )
+        self.header = {
+            'name': bytes2str(name).strip(),
+            'ramp1_min': ramp1_min,
+            'ramp1_max': ramp1_max,
+            'color1': color1,
+            'ramp2_min': ramp2_min,
+            'ramp2_max': ramp2_max,
+            'color2': color2,
+            'image_number': image_number,
+            'lens': lens,
+            'mag_factor': mag_factor,
+            'edited': edited,
+            'merged': merged,
+        }
 
         self.dtype = numpy.dtype('<u1' if byte_format else '<u2')
         if npic > 1:
@@ -4051,7 +4065,7 @@ class BioradPic(LfdFile):
             try:
                 self.notes, self.spacing, self.origin = self._notes()
             except Exception as exc:
-                warnings.warn(f'failed to read PIC notes: {exc}')
+                warnings.warn(f'failed to read PIC notes: {exc}', stacklevel=2)
         ndims = len(self.spacing)
         if npic > 1 and ndims in {2, 3}:
             self.axes = 'ZYX' if ndims == 3 else 'CYX'
@@ -4083,7 +4097,7 @@ class BioradPic(LfdFile):
             # TODO: parse notes to dict
             notes.append((note, notetype, level, x, y))
             if note[:5] == 'AXIS_':
-                index, kind, ori, res = note[5:].split(None, 4)[:4]
+                _index, kind, ori, res = note[5:].split(None, 4)[:4]
                 if kind == '001':
                     spacing.append(float(res))
                     origin.append(float(ori))
@@ -4091,11 +4105,9 @@ class BioradPic(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint8 | numpy.uint16]:
         """Return image data as array."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         self._fh.seek(76)
         data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
         return data.reshape(*self.shape)
@@ -4157,7 +4169,7 @@ def bioradpic_write(
             Name of file to write.
         data:
             Data to write.
-            Must be two or three-dimensional of type uint18 or uint16.
+            Must be two or three-dimensional of type uint8 or uint16.
         spacing, origin:
             Position and spacing of pixel or voxel in micrometer.
         name, lens, mag_factor, image_number, merged, edited, \
@@ -4178,7 +4190,7 @@ def bioradpic_write(
     if data.dtype.char not in 'BH':
         raise ValueError('data type must be uint8 or uint16')
     if data.ndim == 2:
-        data.shape = 1, data.shape[0], data.shape[1]
+        data = data.reshape(1, data.shape[0], data.shape[1])
     if name is None:
         name = os.path.split(filename)[-1]
     header = struct.pack(
@@ -4323,7 +4335,13 @@ class Ccp4Map(LfdFile):
     spacegoup: int
     """IUCr space group number (1-230)."""
 
-    _dtypes: dict[int, str] = {0: 'i1', 1: 'i2', 2: 'f4', 4: 'q8', 5: 'i1'}
+    _dtypes: ClassVar[dict[int, str]] = {
+        0: 'i1',
+        1: 'i2',
+        2: 'f4',
+        4: 'q8',
+        5: 'i1',
+    }
 
     def _init(self, **kwargs: Any) -> None:
         """Read CCP4 file header and symboltable."""
@@ -4371,7 +4389,7 @@ class Ccp4Map(LfdFile):
                 T2,
                 T3,
                 # extra,
-                map_,  # b'MAP '
+                _map,  # b'MAP '
                 machst,  # machine stamp,
                 self.density_rms,
                 nlabl,  # number of labels used
@@ -4397,7 +4415,9 @@ class Ccp4Map(LfdFile):
             byteorder = {b'DA\x00\x00': '<', b'\x11\x11\x00\x00': '>'}[machst]
         except KeyError:
             byteorder = '='
-            warnings.warn(f'Ccp4Map: unknown machine stamp: {machst}')
+            warnings.warn(
+                f'Ccp4Map: unknown machine stamp: {machst}', stacklevel=2
+            )
         try:
             self.dtype = numpy.dtype(byteorder + Ccp4Map._dtypes[mode])
         except KeyError as exc:
@@ -4615,7 +4635,7 @@ class Vaa3dRaw(LfdFile):
 
     _filepattern = r'.*\.(v3draw|raw)$'
     _filesizemin = 24 + 1 + 2 + 4 * 2  # 2 byte format
-    _figureargs = {'figsize': (8, 8)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 8)}
 
     def _init(self, **kwargs: Any) -> None:
         """Read header and validate file size."""
@@ -4718,8 +4738,9 @@ def vaa3draw_write(
         *data.shape[:0:-1],
     )
     if data.shape[0] > 1:
-        fmt = '%%s.t{t:0%i}%%s' % int(math.log(data.shape[0], 10) + 1)
+        fmt = f'%s.t{{t:0{int(math.log10(data.shape[0]) + 1)}}}%s'
         filenamefmt = fmt % os.path.splitext(filename)
+
     else:
         filenamefmt = str(filename)
     for t in range(data.shape[0]):
@@ -4753,7 +4774,7 @@ class VoxxMap(LfdFile):
     _filemode = 'r'
     _fileencoding = 'latin-1'
     _filepattern = r'.*\.map$'
-    _figureargs = {'figsize': (6, 1)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 1)}
 
     def _init(self, **kwargs: Any) -> None:
         """Verify file starts with numbers."""
@@ -4762,21 +4783,18 @@ class VoxxMap(LfdFile):
             for i in self._fh.read(32).strip().split():
                 if 0 <= int(i) <= 255:
                     continue
-                raise ValueError('number out of range')
+                raise ValueError('number out of range')  # noqa: TRY301
         except Exception as exc:
             raise LfdFileError(self) from exc
-        self.shape = (256, 3)
+        self.shape = 256, 3
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint8]:
         """Return palette data as uint8 array of shape (256, 3)."""
-        assert (
-            self._fh is not None
-            and self.shape is not None
-            and self.dtype is not None
-        )
         assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
         self._fh.seek(0)
         data = numpy.fromfile(self._fh, numpy.uint8, 1024, sep=' ')
         return data.reshape(256, 4)
@@ -4854,7 +4872,7 @@ class NetpbmFile(LfdFile):
     """
 
     _filepattern = r'.*\.(pnm|pbm|pgm|ppm|pam|pfm|xv)$'
-    _figureargs = {'figsize': (8, 6)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
 
     # _netpbm: netpbmfile.NetpbmFile
 
@@ -4932,7 +4950,7 @@ class OifFile(LfdFile):
     """
 
     _filepattern = r'.*\.(oib|oif)$'
-    _figureargs = {'figsize': (8, 7)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 7)}
 
     def _init(self, **kwargs: Any) -> None:
         """Open OIF or OIB file."""
@@ -5013,7 +5031,7 @@ class CziFile(LfdFile):
     """
 
     _filepattern = r'.*\.(czi)$'
-    _figureargs = {'figsize': (8, 6)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
 
     def _init(self, **kwargs: Any) -> None:
         """Validate file is a CZI file."""
@@ -5092,7 +5110,7 @@ class TiffFile(LfdFile):
     """
 
     _filepattern = r'.*\.(tif|tiff|stk|lsm|tf8)$'
-    _figureargs = {'figsize': (8, 6)}
+    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
 
     _tif: tifffile.TiffFile | None
     _series: tifffile.TiffPageSeries
@@ -5252,7 +5270,7 @@ def read_record(
 
 def determine_shape(
     shape: tuple[int, ...],
-    dtype: DTypeLike,
+    dtype: DTypeLike | None,
     size: int,
     /,
     *,
@@ -5318,7 +5336,8 @@ def format_dict(
 ) -> str:
     """Return pretty-print of nested dictionary."""
     result = []
-    for k, v in sorted(adict.items(), key=lambda x: str(x[0]).lower()):
+    for item in sorted(adict.items(), key=lambda x: str(x[0]).lower()):
+        k, v = item
         if any(k.startswith(e) for e in excludes):
             continue
         if isinstance(v, dict):
@@ -5370,7 +5389,7 @@ def bytes2str(
 
 def nullfunc(*args: Any, **kwargs: Any) -> None:
     """Null function."""
-    return
+    del args, kwargs
 
 
 def logger() -> logging.Logger:
@@ -5388,12 +5407,12 @@ def main() -> None:
         pass
 
     @cli.command(help='Convert files to TIFF.')
-    @click.option(
-        '--format',
-        default='tiff',
-        help='Output file format.',
-        type=click.Choice(['tiff']),
-    )
+    # @click.option(
+    #     '--format',
+    #     default='tiff',
+    #     help='Output file format.',
+    #     type=click.Choice(['tiff']),
+    # )
     @click.option(
         '--compress',
         default=0,
@@ -5401,7 +5420,7 @@ def main() -> None:
         type=click.IntRange(0, 10, clamp=False),
     )
     @click.argument('files', nargs=-1, type=click.Path(dir_okay=False))
-    def convert(format: str, compress: int, files: Any) -> None:
+    def convert(compress: int, files: Any) -> None:
         if not files:
             files = askopenfilename(
                 title='Select LFD file(s)',
