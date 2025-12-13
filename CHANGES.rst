@@ -1,6 +1,11 @@
 Revisions
 ---------
 
+2025.12.12
+
+- Derive LfdFileError from ValueError.
+- Improve code quality.
+
 2025.9.17
 
 - Many breaking changes to FLIMbox functionality (use fbdfile package instead):
