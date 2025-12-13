@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.9.17
+:Version: 2025.12.12
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +49,25 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.7, 3.14.0rc 64-bit
-- `NumPy <https://pypi.org/project/numpy/>`_ 2.3.3
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.9.9 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.9.17 (optional)
+- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.3.5
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.12.12 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.12.12 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.5.10 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.5.8 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.6
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.12.12 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.12.12 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.7
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.2.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2025.12.12
+
+- Derive LfdFileError from ValueError.
+- Improve code quality.
 
 2025.9.17
 
