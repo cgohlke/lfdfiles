@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.12.12
+:Version: 2026.1.14
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -50,19 +50,23 @@ This revision was tested with the following requirements and dependencies
 (other versions may work):
 
 - `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.3.5
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.12.12 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.12.12 (optional)
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.1
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.1.14 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.1.14 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.12.12 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.12.12 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.7
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.1.8 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.8 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.1.14
+
+- Improve code quality.
 
 2025.12.12
 
@@ -97,42 +101,6 @@ Revisions
 - Drop support for Python 3.9.
 
 2024.10.24
-
-- Fix variable length little-endian base 128 decoding.
-
-2024.9.15
-
-- Improve typing.
-- Deprecate Python 3.9, support Python 3.13.
-
-2024.5.24
-
-- Fix docstring examples not correctly rendered on GitHub.
-
-2024.4.24
-
-- Support NumPy 2.
-
-2024.3.4
-
-- Fix decoding 32-bit, 16 windows, 4 channels Spartan6 FBD files (#1).
-
-2023.9.26
-
-- Remove phasor and lifetime methods from VistaIfli (breaking).
-- Rename SimfcsFbd and SimfcsFbf to FlimboxFbd and FlimboxFbf (breaking).
-- Deprecate SimfcsFbd and SimfcsFbf.
-- Support int16 FLIMbox cross correlation phase indices (bins).
-- Add FlimboxFbs class for ISS VistaVision FLIMbox settings.
-- Add decoder for 32-bit, 16 windows, 4 channels FlimboxFbd (untested).
-
-2023.9.16
-
-- Rewrite VistaIfli based on file format specification (breaking).
-- Define positional and keyword parameters (breaking).
-- SimfcsFbd.asarray returns bins only (breaking).
-
-2023.8.30
 
 - …
 
@@ -205,7 +173,7 @@ Create a Bio-Rad PIC file from a NumPy array:
 
 .. code-block:: python
 
-    >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+    >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
     >>> bioradpic_write('_biorad.pic', data)
 
 Read the volume data from the PIC file as NumPy array, and access metadata:
