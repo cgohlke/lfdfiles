@@ -1,6 +1,6 @@
 # lfdfiles.py
 
-# Copyright (c) 2012-2025, Christoph Gohlke
+# Copyright (c) 2012-2026, Christoph Gohlke
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2025.12.12
+:Version: 2026.1.14
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -77,19 +77,23 @@ This revision was tested with the following requirements and dependencies
 (other versions may work):
 
 - `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.3.5
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2025.12.12 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2025.12.12 (optional)
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.1
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.1.14 (optional)
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.1.14 (optional)
 - `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2025.12.12 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2025.12.12 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.7
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.1.8 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.8 (optional)
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.1.14
+
+- Improve code quality.
 
 2025.12.12
 
@@ -124,42 +128,6 @@ Revisions
 - Drop support for Python 3.9.
 
 2024.10.24
-
-- Fix variable length little-endian base 128 decoding.
-
-2024.9.15
-
-- Improve typing.
-- Deprecate Python 3.9, support Python 3.13.
-
-2024.5.24
-
-- Fix docstring examples not correctly rendered on GitHub.
-
-2024.4.24
-
-- Support NumPy 2.
-
-2024.3.4
-
-- Fix decoding 32-bit, 16 windows, 4 channels Spartan6 FBD files (#1).
-
-2023.9.26
-
-- Remove phasor and lifetime methods from VistaIfli (breaking).
-- Rename SimfcsFbd and SimfcsFbf to FlimboxFbd and FlimboxFbf (breaking).
-- Deprecate SimfcsFbd and SimfcsFbf.
-- Support int16 FLIMbox cross correlation phase indices (bins).
-- Add FlimboxFbs class for ISS VistaVision FLIMbox settings.
-- Add decoder for 32-bit, 16 windows, 4 channels FlimboxFbd (untested).
-
-2023.9.16
-
-- Rewrite VistaIfli based on file format specification (breaking).
-- Define positional and keyword parameters (breaking).
-- SimfcsFbd.asarray returns bins only (breaking).
-
-2023.8.30
 
 - …
 
@@ -230,7 +198,7 @@ Examples
 
 Create a Bio-Rad PIC file from a NumPy array:
 
->>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+>>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
 >>> bioradpic_write('_biorad.pic', data)
 
 Read the volume data from the PIC file as NumPy array, and access metadata:
@@ -253,7 +221,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2025.12.12'
+__version__ = '2026.1.14'
 
 __all__ = [
     'BioradPic',
@@ -309,6 +277,7 @@ __all__ = [
     'voxxmap_write',
 ]
 
+import contextlib
 import copy
 import logging
 import math
@@ -545,10 +514,10 @@ class LfdFile(metaclass=LfdFileRegistry):
                 continue
             else:
                 return super().__new__(lfdfile)  # type: ignore[no-any-return]
-        raise LfdFileError(
-            'failed to read file using any LfdFile class.\n'
-            + '\n'.join(exceptions)
+        msg = '\n'.join(
+            ('failed to read file using any LfdFile class.', *exceptions)
         )
+        raise LfdFileError(msg)
 
     def __init__(
         self,
@@ -579,7 +548,8 @@ class LfdFile(metaclass=LfdFileRegistry):
                 if fname.lower() == self._filename.lower():
                     break
             else:
-                raise LfdFileError(self, 'not a component file')
+                msg = 'not a component file'
+                raise LfdFileError(self, msg)
             # try to open file using all registered classes
             component_list: list[tuple[str, LfdFile]] = []
             for label, fname in components_:
@@ -594,10 +564,12 @@ class LfdFile(metaclass=LfdFileRegistry):
                     continue
                 component_list.append((label, lfdfile))
             if not component_list:
-                raise LfdFileError(self, 'no component files found')
+                msg = 'no component files found'
+                raise LfdFileError(self, msg)
             self.components = component_list
             if lfdfile.shape is None:
-                raise LfdFileError(self, 'no shape')
+                msg = 'no shape'
+                raise LfdFileError(self, msg)
             self.shape = (len(component_list), *lfdfile.shape)
             self.dtype = lfdfile.dtype
             if component_list[0][1].axes is not None:
@@ -613,12 +585,13 @@ class LfdFile(metaclass=LfdFileRegistry):
             except Exception as exc:
                 self._fh.close()
                 self._fh = None
-                raise LfdFileError(self, 'not a text file') from exc
+                msg = 'not a text file'
+                raise LfdFileError(self, msg) from exc
             if size != self._filesizemin:
                 self._fh.close()
                 self._fh = None
-                raise LfdFileError(self, 'file is too small')
-
+                msg = 'file is too small'
+                raise LfdFileError(self, msg)
             self._fh.seek(_offset)
             try:
                 self._init(**kwargs)
@@ -668,10 +641,8 @@ class LfdFile(metaclass=LfdFileRegistry):
         Call :py:meth:`LfdFile._close`.
 
         """
-        try:
+        with contextlib.suppress(Exception):
             self._close()
-        except Exception:  # noqa: S110
-            pass
         if self._fh:
             self._fh.close()
             self._fh = None
@@ -733,10 +704,8 @@ class LfdFile(metaclass=LfdFileRegistry):
         import_pyplot()
         assert pyplot is not None
         figure = pyplot.figure(facecolor='w', **self._figureargs)
-        try:
+        with contextlib.suppress(Exception):
             figure.canvas.manager.window.title('LfdFiles - ' + self._filename)
-        except Exception:  # noqa: S110
-            pass
         self._plot(figure, **kwargs)
         pyplot.show()
 
@@ -848,11 +817,11 @@ class LfdFile(metaclass=LfdFileRegistry):
         if not self._filepattern or self._filepattern == r'.*':
             return
         if re.search(self._filepattern, self._filename, re.IGNORECASE) is None:
-            raise LfdFileError(
-                self,
-                f'.\n    File name {self._filename!r}'
-                f' does not match {self._filepattern!r}',
+            msg = (
+                f'.\n    File name {self._filename!r} '
+                f'does not match {self._filepattern!r}'
             )
+            raise LfdFileError(self, msg)
 
     def _decompress_header(
         self, max_length: int, /, max_read: int = 256
@@ -966,7 +935,8 @@ class LfdFileSequence(FileSequence):
         if imread is None:
             imread = self._readfunction
         if imread is None:
-            raise ValueError('imread function not specified')
+            msg = 'imread function not specified'
+            raise ValueError(msg)
 
         imread_func: Callable[..., NDArray[Any]]
 
@@ -1045,25 +1015,26 @@ class RawPal(LfdFile):
 
         """
         assert self._fh is not None
-        data = numpy.fromfile(self._fh, numpy.uint8).reshape(256, -1)
+        data = numpy.fromfile(self._fh, numpy.uint8).reshape((256, -1))
         if order is None:
             a = data.astype(numpy.int32)
-            b = a.reshape(-1, 256).T
+            b = a.reshape((-1, 256)).T
             if numpy.sum(numpy.abs(numpy.diff(a, axis=0))) > numpy.sum(
                 numpy.abs(numpy.diff(b, axis=0))
             ):
-                data = data.reshape(-1, 256).T
+                data = data.reshape((-1, 256)).T
         elif order == 'F':
-            data = data.reshape(-1, 256).T
+            data = data.reshape((-1, 256)).T
         elif order != 'C':
-            raise ValueError('unknown order', order)
+            msg = f'unknown {order=!r}'  # type: ignore[unreachable]
+            raise ValueError(msg)
         if data.shape[1] == 4 and numpy.all(data[:, 3] == 0):
             data[:, 3] = 255  # fix transparency
         return data
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
-        pal = self.asarray().reshape(1, 256, -1)
+        pal = self.asarray().reshape((1, 256, -1))
         ax = figure.add_subplot(1, 1, 1)
         ax.set_title(self._filename)
         ax.yaxis.set_visible(False)
@@ -1137,12 +1108,12 @@ class SimfcsVpl(LfdFile):
         assert self._fh is not None
         data = numpy.fromfile(self._fh, numpy.uint8, 768)
         if self._filesize == 792:
-            return data.reshape(256, 3)
-        return data.reshape(3, 256).T
+            return data.reshape((256, 3))
+        return data.reshape((3, 256)).T
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
-        pal = self.asarray().reshape(1, 256, -1)
+        pal = self.asarray().reshape((1, 256, -1))
         ax = figure.add_subplot(1, 1, 1)
         ax.set_title(self.name if self.name else self._filename)
         ax.yaxis.set_visible(False)
@@ -1234,7 +1205,7 @@ class SimfcsVpp(LfdFile):
         else:
             key = self.names.index(key)
         self._fh.seek(key * 1048 + 24)
-        data = numpy.fromfile(self._fh, numpy.uint8, 1024).reshape(256, 4)
+        data = numpy.fromfile(self._fh, numpy.uint8, 1024).reshape((256, 4))
         if rgba:
             data[:, :3] = data[:, 2::-1]
         if numpy.all(data[:, 3] == 0):
@@ -1246,7 +1217,7 @@ class SimfcsVpp(LfdFile):
         figure.subplots_adjust(top=0.96, bottom=0.02, left=0.18, right=0.95)
         for i, name in enumerate(self.names):
             a = self.asarray(i)
-            a = a.reshape(1, 256, 4)
+            a = a.reshape((1, 256, 4))
             ax = figure.add_subplot(len(self), 1, i + 1)
             if i == 0:
                 ax.set_title(self._filename)
@@ -1299,7 +1270,7 @@ class SimfcsJrn(LfdFile):
 
     Examples:
         >>> with SimfcsJrn('simfcs.jrn', lower=True) as f:
-        ...     f[1]['paramters for tracking']['samplimg frequency']
+        ...     f[1]['paramters for tracking']['samplimg frequency']  # typo
         ...
         15625
 
@@ -1311,6 +1282,7 @@ class SimfcsJrn(LfdFile):
     _noplot = True
 
     # regular expressions of all keys found in journal files
+    # note: many typos
     _keys_ = r"""
         Image experiment
         Correlation expt
@@ -1431,11 +1403,13 @@ class SimfcsJrn(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
-        raise ValueError('SimfcsJrn file does not contain array data')
+        msg = 'SimfcsJrn file does not contain array data'
+        raise ValueError(msg)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
-        raise ValueError('SimfcsJrn file does not contain image data')
+        msg = 'SimfcsJrn file does not contain image data'
+        raise ValueError(msg)
 
     @staticmethod
     def _parse_journal(
@@ -1530,7 +1504,8 @@ class SimfcsBin(LfdFile):
         """Validate file size is multiple of shape and dtype."""
         assert self._fh is not None
         if not 0 <= offset <= self._filesize:
-            raise LfdFileError(self, 'offset out of range')
+            msg = 'offset out of range'
+            raise LfdFileError(self, msg)
         shapes: list[tuple[int, ...]]
         dtypes: list[DTypeLike]
         if shape is None:
@@ -1547,7 +1522,8 @@ class SimfcsBin(LfdFile):
             except Exception:  # noqa: S110
                 pass
         else:
-            raise LfdFileError(self, 'shape and dtype do not match file size')
+            msg = 'shape and dtype do not match file size'
+            raise LfdFileError(self, msg)
         self.dtype = numpy.dtype(dtype)
         self._fh.seek(offset)
 
@@ -1571,7 +1547,7 @@ class SimfcsBin(LfdFile):
                 shape=self.shape,
             )
         data = numpy.fromfile(self._fh, dtype, count=product(self.shape))
-        return data.reshape(*self.shape)
+        return data.reshape(self.shape)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
@@ -1612,14 +1588,15 @@ class SimfcsInt(LfdFile):
         elif self._filesize == 131072:
             self.dtype = numpy.dtype('<u2')
         else:
-            raise LfdFileError(self, 'file size mismatch')
+            msg = 'file size mismatch'
+            raise LfdFileError(self, msg)
         self.shape = 256, 256
         self.axes = 'YX'
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16 | numpy.float32]:
         """Return data as 256x256 array of float32 or uint16."""
         assert self._fh is not None
-        return numpy.fromfile(self._fh, self.dtype).reshape(256, 256)
+        return numpy.fromfile(self._fh, self.dtype).reshape((256, 256))
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
@@ -1653,7 +1630,8 @@ class SimfcsIntPhsMod(LfdFile):
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 256 KB."""
         if self._filesize != 262144:
-            raise LfdFileError(self, 'file size mismatch')
+            msg = 'file size mismatch'
+            raise LfdFileError(self, msg)
         self.dtype = numpy.dtype('<f4')
         self.shape = 256, 256
         self.axes = 'YX'
@@ -1765,7 +1743,7 @@ class SimfcsFit(LfdFile):
         'D1 (um2/s)',
         'G2',
         'D2 (um2/s)',
-        'Exp aplitude',
+        'Exp aplitude',  # typo in SimFCS
         'Exp time/Ch1 int',
         'Triplet rate/Ch2 int',
         'Fraction vesicle',
@@ -1778,7 +1756,8 @@ class SimfcsFit(LfdFile):
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 384 KB."""
         if self._filesize != 393224:
-            raise LfdFileError(self, 'file size mismatch')
+            msg = 'file size mismatch'
+            raise LfdFileError(self, msg)
 
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return intensity image as NumPy arrays."""
@@ -1788,7 +1767,7 @@ class SimfcsFit(LfdFile):
         """Return intensity image as NumPy arrays."""
         assert self._fh is not None
         self._fh.seek(131080)
-        return numpy.fromfile(self._fh, '<f4', 65536).reshape(256, 256)
+        return numpy.fromfile(self._fh, '<f4', 65536).reshape((256, 256))
 
     def p_fit(self, size: int = 32) -> NDArray[numpy.float64]:
         """Return fit parameters as NumPy arrays.
@@ -1799,10 +1778,11 @@ class SimfcsFit(LfdFile):
         """
         assert self._fh is not None
         if not 0 < size <= 32:
-            raise ValueError('size out of range [1..32]')
+            msg = 'size out of range [1..32]'
+            raise ValueError(msg)
         self._fh.seek(0)
-        p_fit = numpy.fromfile(self._fh, '<f8', 16384).reshape(1024, 16)
-        return p_fit[: size * size].reshape(size, size, 16)
+        p_fit = numpy.fromfile(self._fh, '<f8', 16384).reshape((1024, 16))
+        return p_fit[: size * size].reshape((size, size, 16))
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image and fit data to TIFF file."""
@@ -1853,16 +1833,20 @@ class SimfcsCyl(LfdFile):
         """Verify file size matches shape."""
         channels, orbits, points_per_orbit = shape
         if channels > 2 or channels < 1:
-            raise ValueError(f'{channels=} out of range [1..2]')
+            msg = f'{channels=} out of range [1..2]'
+            raise ValueError(msg)
         if points_per_orbit > 256 or points_per_orbit < 1:
-            raise ValueError(f'{points_per_orbit=} out of range [1..256]')
+            msg = f'{points_per_orbit=} out of range [1..256]'
+            raise ValueError(msg)
         if orbits <= 0:
             orbits = points_per_orbit * channels * 2
             if self._filesize % orbits:
-                raise LfdFileError(self, 'invalid shape')
+                msg = 'invalid shape'
+                raise LfdFileError(self, msg)
             orbits = int(self._filesize // orbits)
         elif self._filesize != points_per_orbit * orbits * channels * 2:
-            raise LfdFileError(self, 'invalid shape')
+            msg = 'invalid shape'
+            raise LfdFileError(self, msg)
         self.shape = channels, orbits, points_per_orbit
         self.dtype = numpy.dtype('<u2')
 
@@ -2151,7 +2135,8 @@ class SimfcsB64(LfdFile):
         assert self._fh is not None
         size = struct.unpack('<i', self._fh.read(4))[0]
         if not 1 <= size <= maxsize:
-            raise LfdFileError(self, 'image size out of range')
+            msg = 'image size out of range'
+            raise LfdFileError(self, msg)
         self.isize = size
         self.shape = size, size
         self.dtype = numpy.dtype(dtype)
@@ -2160,7 +2145,8 @@ class SimfcsB64(LfdFile):
         size = product(self.shape) * self.dtype.itemsize
         fsize = self._filesize - 4
         if fsize % self.dtype.itemsize:
-            raise ValueError('file size mismatch')
+            msg = 'file size mismatch'
+            raise ValueError(msg)
         if 'carpet' in self._filename.lower():
             self.shape = (
                 int((fsize // self.dtype.itemsize) // self.isize),
@@ -2182,7 +2168,7 @@ class SimfcsB64(LfdFile):
         assert self.shape is not None
         count = product(self.shape)
         data = numpy.fromfile(self._fh, '<' + self.dtype.char, count=count)
-        return data.reshape(*self.shape)
+        return data.reshape(self.shape)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
@@ -2208,7 +2194,7 @@ def simfcsb64_write(
     Examples:
         >>> data = (
         ...     numpy.arange(5 * 256 * 256)
-        ...     .reshape(5, 256, 256)
+        ...     .reshape((5, 256, 256))
         ...     .astype('int16')
         ... )
         >>> simfcsb64_write('_test.b64', data)
@@ -2219,10 +2205,12 @@ def simfcsb64_write(
     """
     data = numpy.asarray(data)
     if data.dtype.char != 'h':
-        raise ValueError(f'invalid data type {data.dtype} (must be int16)')
+        msg = f'invalid {data.dtype=!r} != int16'
+        raise ValueError(msg)
     # TODO: write carpet
     if data.ndim != 3 or data.shape[1] != data.shape[2]:
-        raise ValueError(f'invalid shape {data.shape}')
+        msg = f'invalid {data.shape=!r} != (-1, size, size)'
+        raise ValueError(msg)
     with open(filename, 'wb') as fh:
         fh.write(struct.pack('I', data.shape[-1]))
         data.tofile(fh)
@@ -2269,10 +2257,12 @@ class SimfcsI64(LfdFile):
     ) -> None:
         """Read file header."""
         if not 32 <= self._filesize <= 67108864:  # limit to 64 MB
-            raise LfdFileError(self, 'file size out of range')
+            msg = 'file size out of range'
+            raise LfdFileError(self, msg)
         size = struct.unpack('<i', self._decompress_header(4))[0]
         if not 2 <= size <= maxsize:
-            raise LfdFileError(self, 'image size out of range')
+            msg = 'image size out of range'
+            raise LfdFileError(self, msg)
         self.shape = size, size
         self.dtype = numpy.dtype(dtype)
         self.axes = 'YX'
@@ -2287,10 +2277,10 @@ class SimfcsI64(LfdFile):
         data = numpy.frombuffer(rawdata, self.dtype, offset=4)
         data = data.copy()  # make writable
         try:
-            data = data.reshape(self.shape[0], self.shape[1])
+            data = data.reshape((self.shape[0], self.shape[1]))
         except Exception:
             # Z64 format with I64 extension
-            data = data.reshape(-1, self.shape[0], self.shape[1])
+            data = data.reshape((-1, self.shape[0], self.shape[1]))
         return data
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
@@ -2314,7 +2304,7 @@ def simfcsi64_write(
             Data to write. Must be of shape (size, size) and type float32.
 
     Examples:
-        >>> data = numpy.arange(256 * 256).reshape(256, 256).astype('float32')
+        >>> data = numpy.arange(256 * 256).reshape((256, 256)).astype('f4')
         >>> simfcsi64_write('_test.i64', data)
         >>> with SimfcsI64('_test.i64') as f:
         ...     assert_array_equal(f.asarray(), data)
@@ -2323,9 +2313,11 @@ def simfcsi64_write(
     """
     data = numpy.asarray(data)
     if data.dtype.char != 'f':
-        raise ValueError(f'invalid data type {data.dtype} (must be float32)')
+        msg = f'{data.dtype=!r} != float32'
+        raise ValueError(msg)
     if data.ndim != 2 or data.shape[0] != data.shape[1]:
-        raise ValueError(f'invalid shape {data.shape}')
+        msg = f'{data.shape=!r} != (size, size)'
+        raise ValueError(msg)
     rawdata = struct.pack('I', data.shape[0]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
@@ -2394,7 +2386,8 @@ class SimfcsZ64(LfdFile):
         header = header[self._skip : self._skip + 8]
         size, inum = struct.unpack('<ii', header)[:2]
         if not 2 <= size <= maxsize[-1] or not 2 <= inum <= maxsize[0]:
-            raise LfdFileError(self, 'image size out of range')
+            msg = 'image size out of range'
+            raise LfdFileError(self, msg)
         if inum == 1 or (doubleheader and 'allDC' in self._filename):
             self.shape = size, size
             self.axes = 'YX'
@@ -2415,9 +2408,9 @@ class SimfcsZ64(LfdFile):
                 rawdata, '<' + self.dtype.char, offset=self._skip + 8
             )
             data = data.copy()  # make writable
-            return data.reshape(*self.shape)
+            return data.reshape(self.shape)
         except ValueError:
-            return data[2:].reshape(*self.shape[1:])
+            return data[2:].reshape(self.shape[1:])
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
@@ -2455,7 +2448,7 @@ def simfcsz64_write(
 
     Examples:
         >>> data = (
-        ...     numpy.arange(5 * 256 * 256).reshape(5, 256, 256).astype('f4')
+        ...     numpy.arange(5 * 256 * 256).reshape((5, 256, 256)).astype('f4')
         ... )
         >>> simfcsz64_write('_test.z64', data)
         >>> with SimfcsZ64('_test.z64') as f:
@@ -2465,9 +2458,11 @@ def simfcsz64_write(
     """
     data = numpy.asarray(data)
     if data.dtype.char != 'f':
-        raise ValueError(f'invalid data type {data.dtype} (must be float32)')
+        msg = f'{data.dtype=!r} != float32'
+        raise ValueError(msg)
     if data.ndim != 3 or data.shape[1] != data.shape[2]:
-        raise ValueError(f'invalid shape {data.shape}')
+        msg = f'{data.shape=!r} != (-1, size, size)'
+        raise ValueError(msg)
     rawdata = struct.pack('II', data.shape[2], data.shape[0]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
@@ -2521,10 +2516,12 @@ class SimfcsR64(SimfcsRef):
     ) -> None:
         """Read file header."""
         if self._filesize < 32:
-            raise LfdFileError(self, 'file size out of range')
+            msg = 'file size out of range'
+            raise LfdFileError(self, msg)
         size = struct.unpack('<i', self._decompress_header(4))[0]
         if not 2 <= size <= maxsize:
-            raise LfdFileError(self, 'image size out of range')
+            msg = 'image size out of range'
+            raise LfdFileError(self, msg)
         # can't determine real shape without decompressing whole file
         self.shape = 5, size, size
         self.dtype = numpy.dtype(dtype)
@@ -2572,7 +2569,7 @@ def simfcsr64_write(
 
     Examples:
         >>> data = (
-        ...     numpy.arange(5 * 256 * 256).reshape(5, 256, 256).astype('f4')
+        ...     numpy.arange(5 * 256 * 256).reshape((5, 256, 256)).astype('f4')
         ... )
         >>> simfcsr64_write('_test.r64', data)
         >>> with SimfcsR64('_test.r64') as f:
@@ -2582,9 +2579,11 @@ def simfcsr64_write(
     """
     data = numpy.asarray(data)
     if data.dtype.char != 'f':
-        raise ValueError(f'invalid data type {data.dtype} (must be float32)')
+        msg = f'{data.dtype=!r} != float32'
+        raise ValueError(msg)
     if data.ndim != 3 or data.shape[0] < 5 or data.shape[1] != data.shape[2]:
-        raise ValueError(f'invalid shape {data.shape}')
+        msg = f'invalid {data.shape=!r}'
+        raise ValueError(msg)
     rawdata = struct.pack('I', data.shape[-1]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
@@ -2696,9 +2695,10 @@ class FlimboxFbd(LfdFile):
         try:
             attr = getattr(self._fbd, name)
         except Exception as exc:
-            raise AttributeError(
+            msg = (
                 f'{self.__class__.__name__!r} object has no attribute {name!r}'
-            ) from exc
+            )
+            raise AttributeError(msg) from exc
         return attr
 
     def asimage(
@@ -2758,11 +2758,13 @@ class FlimboxFbs(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
-        raise ValueError('FlimboxFbs file does not contain array data')
+        msg = 'FlimboxFbs file does not contain array data'
+        raise ValueError(msg)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
-        raise ValueError('FlimboxFbs file does not contain image data')
+        msg = 'FlimboxFbs file does not contain image data'
+        raise ValueError(msg)
 
     def _str(self) -> str | None:
         """Return string with settings."""
@@ -2856,11 +2858,13 @@ class FlimboxFbf(LfdFile):
 
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
-        raise ValueError('FlimboxFbf file does not contain array data')
+        msg = 'FlimboxFbf file does not contain array data'
+        raise ValueError(msg)
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
-        raise ValueError('FlimboxFbf file does not contain image data')
+        msg = 'FlimboxFbf file does not contain image data'
+        raise ValueError(msg)
 
     def _str(self) -> str | None:
         """Return string with header settings."""
@@ -3015,7 +3019,8 @@ class GlobalsLif(LfdFile):
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
-        raise ValueError('GlobalsLif file does not contain image data')
+        msg = 'GlobalsLif file does not contain image data'
+        raise ValueError(msg)
 
     def _str(self) -> str | None:
         """Return string with information about file."""
@@ -3149,7 +3154,8 @@ class GlobalsAscii(LfdFile):
 
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
-        raise ValueError('GlobalsAscii file does not contain image data')
+        msg = 'GlobalsAscii file does not contain image data'
+        raise ValueError(msg)
 
     def _str(self) -> str:
         """Return string with information about file."""
@@ -3275,7 +3281,7 @@ class VistaIfli(LfdFile):
     positions, wavelengths, time points, channels, slices, and frequencies
     from analog or digital frequency domain fluorescence lifetime measurements.
     After a version dependent header of 1024 bytes, the image is stored as
-    a 9 dimensional arrays of float32 and shape
+    a 9-dimensional arrays of float32 and shape
     (position, wavelength, time, channel, Z, Y, X, frequency, sample).
     The phasor array has three samples: the average intensity (DC) and the
     real (g) and imaginary (s) parts of the phasor.
@@ -3331,7 +3337,7 @@ class VistaIfli(LfdFile):
         fields['CompressionType'] = 'B'
         fields['XYZCTsize'] = '5H'
         fields['XYZCTrange'] = '6f'  # x0, x1, y0, y1, z0, z1
-        fields['CordinateUnit'] = 'B'  # unknown, px, um, mm
+        fields['CoordinateUnit'] = 'B'  # unknown, px, um, mm
         fields['PixelTime'] = 'f'
         fields['PixelIntervalTime'] = 'f'
         fields['LineIntervalTime'] = 'f'
@@ -3376,10 +3382,11 @@ class VistaIfli(LfdFile):
             offsets['ModFrequency'] = 70
 
         if header['CompressionType'] != 0:
-            raise NotImplementedError(
+            msg = (
                 f'VistaIfli compression {header["CompressionType"]} '
                 'not supported'
             )
+            raise NotImplementedError(msg)
 
         if sizet > 0:
             if offsets['TimeTags'] > 0:
@@ -3447,7 +3454,7 @@ class VistaIfli(LfdFile):
         fh.seek(offset)
         header['RefDCPhasor'] = numpy.frombuffer(
             fh.read(sizec * sizef * 3 * 4), numpy.float32
-        ).reshape(sizec, sizef, 3)
+        ).reshape((sizec, sizef, 3))
 
         if sizer > 1 or sizee > 1:
             # TODO: Support for multi-positional or spectral VistaIfli
@@ -4084,7 +4091,8 @@ class BioradPic(LfdFile):
         pos = 76 + product(self.shape) * self.dtype.itemsize
         self._fh.seek(pos)
         if self._fh.tell() != pos:
-            raise LfdFileError(self, 'file is too small')
+            msg = 'file is too small'
+            raise LfdFileError(self, msg)
         more = True
         spacing = []
         origin = []
@@ -4110,7 +4118,7 @@ class BioradPic(LfdFile):
         assert self.dtype is not None
         self._fh.seek(76)
         data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
-        return data.reshape(*self.shape)
+        return data.reshape(self.shape)
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
@@ -4177,7 +4185,7 @@ def bioradpic_write(
             Refer to the Biorad PIC header documentation.
 
     Examples:
-        >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('u1')
+        >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
         >>> bioradpic_write('_test.pic', data)
         >>> with BioradPic('_test.pic') as f:
         ...     assert_array_equal(f.asarray(), data)
@@ -4186,11 +4194,13 @@ def bioradpic_write(
     """
     data = numpy.asarray(data)
     if data.ndim not in {2, 3}:
-        raise ValueError('data must be 2 or 3 dimensional')
+        msg = 'data must be 2 or 3-dimensional'
+        raise ValueError(msg)
     if data.dtype.char not in 'BH':
-        raise ValueError('data type must be uint8 or uint16')
+        msg = 'data type must be uint8 or uint16'
+        raise ValueError(msg)
     if data.ndim == 2:
-        data = data.reshape(1, data.shape[0], data.shape[1])
+        data = data.reshape((1, data.shape[0], data.shape[1]))
     if name is None:
         name = os.path.split(filename)[-1]
     header = struct.pack(
@@ -4348,7 +4358,8 @@ class Ccp4Map(LfdFile):
         assert self._fh is not None
         header = self._fh.read(1024)
         if header[208:212] not in {b'MAP ', b'PAM\x00', b'MAP\x00'}:
-            raise LfdFileError(self, f' {header[:32]}')
+            msg = f' {header[:32]}'
+            raise LfdFileError(self, msg)
         try:
             (
                 nc,
@@ -4421,7 +4432,8 @@ class Ccp4Map(LfdFile):
         try:
             self.dtype = numpy.dtype(byteorder + Ccp4Map._dtypes[mode])
         except KeyError as exc:
-            raise LfdFileError(self, f'unknown mode: {mode}') from exc
+            msg = f'invalid {mode=}'
+            raise LfdFileError(self, msg) from exc
         self.shape = ns, nr, nc
         self.start = nsstart, nrstart, ncstart
         self.cell_interval = nz, ny, nx
@@ -4445,7 +4457,8 @@ class Ccp4Map(LfdFile):
         else:
             self.labels = []
         if nsymbt < 0 or nsymbt % 80:
-            raise LfdFileError(self, f'invalid symbol table size: {nsymbt}')
+            msg = f'invalid symbol table size: {nsymbt}'
+            raise LfdFileError(self, msg)
         self.symboltable = [
             stripnull(self._fh.read(80)) for _ in range(nsymbt // 80)
         ]
@@ -4512,7 +4525,7 @@ def ccp4map_write(
             See :py:class:`Ccp4Map`.
 
     Examples:
-        >>> data = numpy.arange(1000000).reshape(100, 100, 100).astype('f4')
+        >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('f4')
         >>> ccp4map_write('_test.ccp4', data)
         >>> with Ccp4Map('_test.ccp4') as f:
         ...     assert_array_equal(f.asarray(), data)
@@ -4521,11 +4534,13 @@ def ccp4map_write(
     """
     data = numpy.asarray(data)
     if data.ndim != 3:
-        raise ValueError('data must be 3 dimensional')
+        msg = f'{data.ndim=} != 3'
+        raise ValueError(msg)
     try:
         mode = {'i1': 0, 'i2': 1, 'f4': 2, 'q8': 4}[data.dtype.str[-2:]]
     except KeyError as exc:
-        raise ValueError('dtype not supported by MAP format') from exc
+        msg = 'dtype not supported by MAP format'
+        raise ValueError(msg) from exc
     if cell_interval is None:
         cell_interval = data.shape
     if cell_length is None:
@@ -4659,7 +4674,8 @@ class Vaa3dRaw(LfdFile):
             header += self._fh.read(8)
             self.shape = struct.unpack(byteorder + 'IIII', header[27:])[::-1]
             if self._filesize != len(header) + product(self.shape) * itemsize:
-                raise LfdFileError(self, 'file size mismatch')
+                msg = 'file size mismatch'
+                raise LfdFileError(self, msg)
         self.axes = 'CZYX'
 
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
@@ -4668,7 +4684,7 @@ class Vaa3dRaw(LfdFile):
         assert self.dtype is not None
         assert self.shape is not None
         data = numpy.fromfile(self._fh, self.dtype)
-        return data.reshape(*self.shape)
+        return data.reshape(self.shape)
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
@@ -4709,7 +4725,7 @@ def vaa3draw_write(
     Examples:
         >>> data = (
         ...     numpy.arange(1000000)
-        ...     .reshape(10, 10, 100, 100)
+        ...     .reshape((10, 10, 100, 100))
         ...     .astype('uint16')
         ... )
         >>> vaa3draw_write('_test.v3draw', data, byteorder='<')
@@ -4720,13 +4736,16 @@ def vaa3draw_write(
     """
     data = numpy.array(data, order='C', ndmin=5, copy=False)
     if data.dtype.char not in 'BHf':
-        raise ValueError(f'invalid data type {data.dtype}')
+        msg = f'invalid {data.dtype=}'
+        raise ValueError(msg)
     if data.ndim != 5:
-        raise ValueError('data must be up to 5 dimensional')
+        msg = f'{data.ndim=} != 5'
+        raise ValueError(msg)
     if byteorder is None:
         byteorder = '<' if sys.byteorder == 'little' else '>'
     elif byteorder not in {'>', '<'}:
-        raise ValueError(f'invalid byteorder {byteorder}')
+        msg = f'invalid byteorder {byteorder}'
+        raise ValueError(msg)
     assert byteorder is not None  # for mypy
     itemsize = {'B': 1, 'H': 2, 'f': 4}[data.dtype.char]
     dtype = byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
@@ -4783,7 +4802,8 @@ class VoxxMap(LfdFile):
             for i in self._fh.read(32).strip().split():
                 if 0 <= int(i) <= 255:
                     continue
-                raise ValueError('number out of range')  # noqa: TRY301
+                msg = 'number out of range'
+                raise ValueError(msg)  # noqa: TRY301
         except Exception as exc:
             raise LfdFileError(self) from exc
         self.shape = 256, 3
@@ -4797,11 +4817,11 @@ class VoxxMap(LfdFile):
         assert self.dtype is not None
         self._fh.seek(0)
         data = numpy.fromfile(self._fh, numpy.uint8, 1024, sep=' ')
-        return data.reshape(256, 4)
+        return data.reshape((256, 4))
 
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
-        pal = self.asarray().reshape(1, 256, -1)
+        pal = self.asarray().reshape((1, 256, -1))
         ax = figure.add_subplot(1, 1, 1)
         ax.set_title(self._filename)
         ax.yaxis.set_visible(False)
@@ -4831,7 +4851,7 @@ def voxxmap_write(
 
     Examples:
         >>> data = numpy.repeat(numpy.arange(256, dtype='uint8'), 4).reshape(
-        ...     -1, 4
+        ...     (-1, 4)
         ... )
         >>> voxxmap_write('_test_vox.map', data)
         >>> with VoxxMap('_test_vox.map') as f:
@@ -4841,7 +4861,8 @@ def voxxmap_write(
     """
     data = numpy.array(data, copy=False)
     if data.dtype.char != 'B' or data.shape != (256, 4):
-        raise ValueError('not a 256x4 uint8 array')
+        msg = 'not a 256x4 uint8 array'
+        raise ValueError(msg)
     numpy.savetxt(filename, data, fmt='%.0f')
 
 
@@ -5298,17 +5319,21 @@ def determine_shape(
     dtype = numpy.dtype(dtype)
     undetermined = len([i for i in shape if i < 0])
     if undetermined > 1:
-        raise ValueError('invalid shape')
+        msg = 'invalid shape'
+        raise ValueError(msg)
     if size < 0:
-        raise ValueError('invalid size')
+        msg = 'invalid size'
+        raise ValueError(msg)
     if undetermined:
         count = int(size // dtype.itemsize)
     else:
         count = product(shape)
         if count * dtype.itemsize > size:
-            raise exception('file is too small')
+            msg = 'file is too small'
+            raise exception(msg)
     if validate and count * dtype.itemsize != size:
-        raise exception('file size mismatch')
+        msg = 'file size mismatch'
+        raise exception(msg)
     if undetermined:
         t = count // product(i for i in shape if i > 0)
         shape = tuple((i if i > 0 else t) for i in shape)
