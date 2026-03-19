@@ -8,7 +8,7 @@ Lfdfiles is a Python library and console script for reading, writing,
 converting, and viewing many of the proprietary file formats used
 to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
-For example:
+Supported formats include:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
 - FLIMbox FBD, FBF, FBS.XML
@@ -21,7 +21,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.1.14
+:Version: 2026.3.18
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,13 +49,13 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.1
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.1.14 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.1.14 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.1.8 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.8 (optional)
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.12, 3.14.3 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.3
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.3.3
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.2.6 (optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2026.3.17 (optional)
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.2.8 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.29 (optional)
 - `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
@@ -63,6 +63,15 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2026.3.18
+
+- Replace LfdFileRegistry metaclass with __init_subclass__.
+- Add LfdFile.open classmethod as typed factory for auto-detection.
+- Add LfdFile._probe classmethod for cheap file pre-screening.
+- Add asarray overrides with typed signatures to select subclasses.
+- Convert _components to classmethod.
+- Drop support for Python 3.11.
 
 2026.1.14
 
@@ -111,7 +120,7 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.10 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.11 is no longer supported. 32-bit versions are deprecated.
 
 Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
@@ -174,13 +183,13 @@ Create a Bio-Rad PIC file from a NumPy array:
 .. code-block:: python
 
     >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
-    >>> bioradpic_write('_biorad.pic', data)
+    >>> bioradpic_write(TEMP / '_biorad.pic', data)
 
 Read the volume data from the PIC file as NumPy array, and access metadata:
 
 .. code-block:: python
 
-    >>> with BioradPic('_biorad.pic') as f:
+    >>> with BioradPic(TEMP / '_biorad.pic') as f:
     ...     f.shape
     ...     f.spacing
     ...     data = f.asarray()
@@ -192,6 +201,6 @@ Convert the PIC file to a compressed TIFF file:
 
 .. code-block:: python
 
-    >>> with BioradPic('_biorad.pic') as f:
-    ...     f.totiff('_biorad.tif', compression='zlib')
+    >>> with BioradPic(TEMP / '_biorad.pic') as f:
+    ...     f.totiff(TEMP / '_biorad.tif', compression='zlib')
     ...
