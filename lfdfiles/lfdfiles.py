@@ -35,7 +35,7 @@ Lfdfiles is a Python library and console script for reading, writing,
 converting, and viewing many of the proprietary file formats used
 to store experimental data and metadata at the
 `Laboratory for Fluorescence Dynamics <https://www.lfd.uci.edu/>`_.
-For example:
+Supported formats include:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
 - FLIMbox FBD, FBF, FBS.XML
@@ -48,7 +48,7 @@ For example:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.1.14
+:Version: 2026.3.18
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,13 +76,13 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.11.9, 3.12.10, 3.13.11, 3.14.2 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.1
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.1.14 (optional)
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.1.14 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2019.7.2.1 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.1.8 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.8 (optional)
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.12, 3.14.3 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.3
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.3.3
+- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.2.6 (optional)
+- `Czifile <https://pypi.org/project/czifile/>`_ 2026.3.17 (optional)
+- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.2.8 (optional)
+- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.29 (optional)
 - `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
   (optional, for plotting)
 - `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
@@ -90,6 +90,15 @@ This revision was tested with the following requirements and dependencies
 
 Revisions
 ---------
+
+2026.3.18
+
+- Replace LfdFileRegistry metaclass with __init_subclass__.
+- Add LfdFile.open classmethod as typed factory for auto-detection.
+- Add LfdFile._probe classmethod for cheap file pre-screening.
+- Add asarray overrides with typed signatures to select subclasses.
+- Convert _components to classmethod.
+- Drop support for Python 3.11.
 
 2026.1.14
 
@@ -138,7 +147,7 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.10 is no longer supported. 32-bit versions are deprecated.
+Python <= 3.11 is no longer supported. 32-bit versions are deprecated.
 
 Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
@@ -199,11 +208,11 @@ Examples
 Create a Bio-Rad PIC file from a NumPy array:
 
 >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
->>> bioradpic_write('_biorad.pic', data)
+>>> bioradpic_write(TEMP / '_biorad.pic', data)
 
 Read the volume data from the PIC file as NumPy array, and access metadata:
 
->>> with BioradPic('_biorad.pic') as f:
+>>> with BioradPic(TEMP / '_biorad.pic') as f:
 ...     f.shape
 ...     f.spacing
 ...     data = f.asarray()
@@ -213,17 +222,18 @@ Read the volume data from the PIC file as NumPy array, and access metadata:
 
 Convert the PIC file to a compressed TIFF file:
 
->>> with BioradPic('_biorad.pic') as f:
-...     f.totiff('_biorad.tif', compression='zlib')
+>>> with BioradPic(TEMP / '_biorad.pic') as f:
+...     f.totiff(TEMP / '_biorad.tif', compression='zlib')
 ...
 
 """
 
 from __future__ import annotations
 
-__version__ = '2026.1.14'
+__version__ = '2026.3.18'
 
 __all__ = [
+    'FILE_EXTENSIONS',
     'BioradPic',
     'Ccp4Map',
     'CziFile',
@@ -288,7 +298,7 @@ import sys
 import warnings
 import zipfile
 import zlib
-from typing import IO, TYPE_CHECKING
+from typing import IO, TYPE_CHECKING, override
 
 import numpy
 import tifffile
@@ -306,7 +316,7 @@ from tifffile import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
     from types import ModuleType, TracebackType
-    from typing import Any, ClassVar, Literal, Self, TypeVar
+    from typing import Any, ClassVar, Literal, Self
 
     from matplotlib.figure import Figure
     from numpy.typing import ArrayLike, DTypeLike, NDArray
@@ -355,32 +365,7 @@ class LfdFileError(ValueError):
         ValueError.__init__(self, arg)
 
 
-class LfdFileRegistry(type):
-    """Metaclass to register classes derived from LfdFile."""
-
-    classes: ClassVar[list[type[LfdFile]]] = []
-    """Registered LfdFile classes."""
-
-    def __new__(
-        mcs: Any, name: str, bases: tuple[type, ...], dct: dict[str, Any], /
-    ) -> LfdFileRegistry:
-        cls = type.__new__(mcs, name, bases, dct)
-        if cls.__name__[:7] != 'LfdFile':
-            LfdFileRegistry.classes.append(cls)
-        return cls  # type: ignore[no-any-return]
-
-    @staticmethod
-    def sort() -> None:
-        """Move SimfcsBin class to end of list.
-
-        :meta private:
-
-        """
-        lst = LfdFileRegistry.classes
-        lst.append(lst.pop(lst.index(SimfcsBin)))
-
-
-class LfdFile(metaclass=LfdFileRegistry):
+class LfdFile:
     """Base class for reading LFD files.
 
     Open file(s) and read headers and metadata.
@@ -398,20 +383,24 @@ class LfdFile(metaclass=LfdFileRegistry):
             Arguments passed to :py:meth:`LfdFile._init`.
 
     Examples:
-        >>> with LfdFile('flimfast.flif') as f:
+        >>> with LfdFile(DATA / 'flimfast.flif') as f:
         ...     type(f)
         ...
         <class '...FlimfastFlif'>
-        >>> with LfdFile('simfcs.ref', validate=False) as f:
-        ...     type(f)
-        ...
-        <class '...SimfcsRef'>
-        >>> with LfdFile('simfcs.bin', shape=(-1, 256, 256), dtype='u2') as f:
-        ...     type(f)
-        ...
-        <class '...SimfcsBin'>
 
     """
+
+    _registry: ClassVar[list[type[LfdFile]]] = []
+    """Registered LfdFile subclasses.
+
+    :meta private:
+
+    """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.__name__[:7] != 'LfdFile':
+            LfdFile._registry.append(cls)
 
     _filemode: ClassVar[str] = 'rb'
     """File open mode.
@@ -420,8 +409,8 @@ class LfdFile(metaclass=LfdFileRegistry):
 
     """
 
-    _fileencoding: str | None = None
-    """Text file encoding mode.
+    _fileencoding: ClassVar[str | None] = None
+    """Text file encoding.
 
     :meta public:
 
@@ -440,7 +429,7 @@ class LfdFile(metaclass=LfdFileRegistry):
 
     """
     _noplot: ClassVar[bool] = False
-    """No plot.
+    """Plotting disabled.
 
     :meta public:
 
@@ -449,6 +438,13 @@ class LfdFile(metaclass=LfdFileRegistry):
     """Arguments passed to `pyplot.figure`.
 
     :meta public:
+
+    """
+
+    _probe_priority: ClassVar[int] = 0
+    """Priority for probing order. Higher values are tried later.
+
+    :meta private:
 
     """
 
@@ -463,7 +459,7 @@ class LfdFile(metaclass=LfdFileRegistry):
     """Character codes of array axes."""
 
     components: list[tuple[str, LfdFile]]
-    """Component file label and class."""
+    """Component file labels and instances."""
 
     _fh: Any
     _pos: int | None
@@ -472,13 +468,106 @@ class LfdFile(metaclass=LfdFileRegistry):
     _filename: str
     _filepath: str
 
+    @classmethod
+    def _probe(
+        cls,
+        filename: os.PathLike[Any] | str,
+        /,
+    ) -> bool:
+        """Return whether `filename` may be readable by this class.
+
+        Perform cheap pre-screening based on filename pattern and file size.
+        Subclasses with magic bytes may override this for more specific
+        checks.
+
+        :meta private:
+
+        """
+        fname = os.path.basename(os.fspath(filename))
+        if not re.search(cls._filepattern, fname, re.IGNORECASE):
+            return False
+        try:
+            fsize = os.path.getsize(filename)
+        except OSError:
+            return False
+        return fsize >= cls._filesizemin
+
+    @classmethod
+    def open(
+        cls,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        registry: Sequence[type[LfdFile]] | None = None,
+        skip: set[type[LfdFile]] | None = None,
+        validate: bool = True,
+        **kwargs: Any,
+    ) -> LfdFile:
+        """Return LfdFile subclass instance that can read `filename`.
+
+        Iterate registered LfdFile subclasses and return an instance of
+        the first class that can successfully open the file.
+
+        Parameters:
+            filename: Name of file to open.
+            registry:
+                Sequence of LfdFile subclasses to try. If ``None``,
+                use all registered subclasses.
+            skip:
+                Set of LfdFile subclasses to skip when probing.
+                If ``None`` and *validate* is False, skip overly
+                generic formats.
+            validate:
+                If True, filename must match the class's file pattern.
+            **kwargs: Arguments passed to the subclass constructor.
+
+        Raises:
+            LfdFileError: If no registered class can open *filename*.
+
+        Examples:
+            >>> with LfdFile.open(DATA / 'flimfast.flif') as f:
+            ...     type(f)
+            ...
+            <class '...FlimfastFlif'>
+
+        """
+        if registry is None:
+            registry = LfdFile._registry
+        if skip is None:
+            skip = set()
+            if not validate:
+                skip.update((SimfcsBh, SimfcsCyl, FlimboxFbd, FliezI16))
+        exceptions: list[str] = []
+        for lfdfile in registry:
+            if lfdfile in skip:
+                continue
+            try:
+                with lfdfile(filename, validate=validate, **kwargs):
+                    pass
+            except FileNotFoundError:
+                raise
+            except Exception as exc:
+                if 'does not match' not in str(exc):
+                    import traceback
+
+                    exceptions.append(
+                        f'\n{lfdfile.__name__}\n\n{traceback.format_exc()}'
+                    )
+                continue
+            else:
+                return lfdfile(filename, validate=validate, **kwargs)
+        msg = '\n'.join(
+            ('failed to read file using any LfdFile class.', *exceptions)
+        )
+        raise LfdFileError(msg)
+
     def __new__(
         cls,
         filename: os.PathLike[Any] | str,
         /,
         **kwargs: Any,
     ) -> Self:
-        """Return LfdFile derived class that can open filename."""
+        """Return LfdFile subclass instance that can open filename."""
         if cls is not LfdFile:
             return object.__new__(cls)
 
@@ -489,7 +578,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         skip = kwargs2['skip']
 
         if registry is None:
-            registry = LfdFileRegistry.classes
+            registry = LfdFile._registry
         if skip is None:
             skip = set()
             if not validate:
@@ -538,7 +627,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         self._offset = _offset
 
         self._filepath, self._filename = os.path.split(os.fspath(filename))
-        components_ = self._components() if components else []
+        components_ = self._components(self._filename) if components else []
         if validate:
             self._valid_name()
         if components_:
@@ -567,13 +656,14 @@ class LfdFile(metaclass=LfdFileRegistry):
                 msg = 'no component files found'
                 raise LfdFileError(self, msg)
             self.components = component_list
+            lfdfile = component_list[0][1]  # first component
             if lfdfile.shape is None:
                 msg = 'no shape'
                 raise LfdFileError(self, msg)
             self.shape = (len(component_list), *lfdfile.shape)
             self.dtype = lfdfile.dtype
-            if component_list[0][1].axes is not None:
-                self.axes = 'S' + component_list[0][1].axes
+            if lfdfile.axes is not None:
+                self.axes = 'S' + lfdfile.axes
         else:
             self.components = []
             self._fh = open(  # noqa: SIM115
@@ -624,7 +714,7 @@ class LfdFile(metaclass=LfdFileRegistry):
             s.append(_str)
         return indent(*s)
 
-    def __enter__(self: LfdFileType) -> LfdFileType:  # noqa: PYI019
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
@@ -659,8 +749,7 @@ class LfdFile(metaclass=LfdFileRegistry):
         if self.components:
             data = [c.asarray(*args, **kwargs) for _, c in self.components]
             return numpy.array(data).squeeze()
-        if self._fh is not None and self._pos is not None:
-            self._fh.seek(self._pos)
+        self._seek()
         return self._asarray(*args, **kwargs)
 
     def totiff(
@@ -709,6 +798,25 @@ class LfdFile(metaclass=LfdFileRegistry):
         self._plot(figure, **kwargs)
         pyplot.show()
 
+    @property
+    def filename(self) -> str:
+        """Name of file."""
+        return os.path.join(self._filepath, self._filename)
+
+    @property
+    def size(self) -> int | None:
+        """Number of elements in data array."""
+        if self.shape is None:
+            return None
+        return product(self.shape)
+
+    @property
+    def ndim(self) -> int | None:
+        """Number of dimensions in data array."""
+        if self.shape is None:
+            return None
+        return len(self.shape)
+
     def _init(self, **kwargs: Any) -> None:
         """Validate file and read metadata.
 
@@ -723,12 +831,14 @@ class LfdFile(metaclass=LfdFileRegistry):
 
         """
 
-    def _components(self) -> list[tuple[str, str]]:
+    @classmethod
+    def _components(cls, filename: str, /) -> list[tuple[str, str]]:
         """Return possible names of component files.
 
         :meta public:
 
         """
+        del filename
         return []
 
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
@@ -808,6 +918,15 @@ class LfdFile(metaclass=LfdFileRegistry):
 
         """
 
+    def _seek(self) -> None:
+        """Seek file handle to data position.
+
+        :meta private:
+
+        """
+        if self._fh is not None and self._pos is not None:
+            self._fh.seek(self._pos)
+
     def _valid_name(self) -> None:
         """Raise LfdFileError if filename does not match `_filepattern`.
 
@@ -848,29 +967,6 @@ class LfdFile(metaclass=LfdFileRegistry):
             self._fh.seek(pos)
         return self._fsize
 
-    @property
-    def filename(self) -> str:
-        """Name of file."""
-        return os.path.join(self._filepath, self._filename)
-
-    @property
-    def size(self) -> int | None:
-        """Number of elements in data array."""
-        if self.shape is None:
-            return None
-        return product(self.shape)
-
-    @property
-    def ndim(self) -> int | None:
-        """Number of dimensions in data array."""
-        if self.shape is None:
-            return None
-        return len(self.shape)
-
-
-if TYPE_CHECKING:
-    LfdFileType = TypeVar('LfdFileType', bound=LfdFile)
-
 
 class LfdFileSequence(FileSequence):
     r"""Series of LFD files.
@@ -891,7 +987,7 @@ class LfdFileSequence(FileSequence):
 
     Examples:
         >>> ims = LfdFileSequence(
-        ...     'gpint/v*.int',
+        ...     DATA / 'gpint/v*.int',
         ...     pattern=r'v(?P<Channel>\d)(?P<Image>\d*).int',
         ...     imread=SimfcsInt,
         ... )
@@ -937,18 +1033,21 @@ class LfdFileSequence(FileSequence):
         if imread is None:
             msg = 'imread function not specified'
             raise ValueError(msg)
+        # convert PathLike to str so FileSequence applies glob expansion
+        if isinstance(files, os.PathLike):
+            files = os.fspath(files)
 
         imread_func: Callable[..., NDArray[Any]]
 
         if isinstance(imread, type) and issubclass(imread, LfdFile):
 
             def imread_func(
-                fname: str | os.PathLike[Any],
+                filename: str | os.PathLike[Any],
                 /,
                 lfdfile: type[LfdFile] = imread,  # type: ignore[assignment]
                 **kwargs: Any,
             ) -> NDArray[Any]:
-                with lfdfile(fname) as lfdf:
+                with lfdfile(filename) as lfdf:
                     return lfdf.asarray(**kwargs)
 
         else:
@@ -961,39 +1060,24 @@ class LfdFileSequence(FileSequence):
 class RawPal(LfdFile):
     """Raw color palette.
 
-    PAL files contain a single RGB or RGBA color palette, stored as 256x3 or
-    256x4 unsigned bytes in C or Fortran order, without any header.
+    PAL files contain a single RGB or RGBA color palette, stored as 256x3
+    or 256x4 unsigned bytes in C or Fortran order, without any header.
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with RawPal('rgb.pal') as f:
+        >>> with RawPal(DATA / 'rgb.pal') as f:
         ...     print(f.asarray()[100])
         ...
         [ 16 255 239]
-        >>> with RawPal('rgba.pal') as f:
-        ...     print(f.asarray()[100])
-        ...
-        [219 253 187 255]
-        >>> with RawPal('rrggbb.pal') as f:
-        ...     print(f.asarray()[100])
-        ...
-        [182 114  91]
-        >>> with RawPal('rrggbbaa.pal') as f:
-        ...     print(f.asarray()[100])
-        ...
-        [182 114  91 170]
-        >>> with RawPal('rrggbbaa.pal') as f:
-        ...     print(f.asarray(order='F')[100])
-        ...
-        [182 114  91 170]
 
     """
 
     _filepattern = r'.*\.(pal|raw|bin|lut)$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 1)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 768 or 1024."""
         if self._filesize not in {768, 1024}:
@@ -1002,7 +1086,8 @@ class RawPal(LfdFile):
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
 
-    def _asarray(
+    @override
+    def asarray(
         self, *, order: Literal['C', 'F'] | None = None, **kwargs: Any
     ) -> NDArray[numpy.uint8]:
         """Return palette data as uint8 array of shape (256, 3 or 4).
@@ -1014,6 +1099,14 @@ class RawPal(LfdFile):
                 determined based on size and sum of differences.
 
         """
+        self._seek()
+        return self._asarray(order=order, **kwargs)
+
+    @override
+    def _asarray(
+        self, *, order: Literal['C', 'F'] | None = None, **kwargs: Any
+    ) -> NDArray[numpy.uint8]:
+        """Return palette data as uint8 array of shape (256, 3 or 4)."""
         assert self._fh is not None
         data = numpy.fromfile(self._fh, numpy.uint8).reshape((256, -1))
         if order is None:
@@ -1032,6 +1125,7 @@ class RawPal(LfdFile):
             data[:, 3] = 255  # fix transparency
         return data
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape((1, 256, -1))
@@ -1040,6 +1134,7 @@ class RawPal(LfdFile):
         ax.yaxis.set_visible(False)
         ax.imshow(pal, aspect=20, origin='lower', interpolation='nearest')
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write palette to TIFF file."""
         kwargs.update(photometric='rgb', planarconfig='contig')
@@ -1053,31 +1148,21 @@ class SimfcsVpl(LfdFile):
     """SimFCS or ImObj color palette.
 
     SimFCS VPL files contain a single RGB color palette, stored as 256x3
-    unsigned bytes in C or Fortran order, preceded by a 22- or 24-bytes header.
+    unsigned bytes, preceded by a header. Files with a 22-byte header begin
+    with the magic bytes ``b'vimage'`` and store the palette in Fortran order
+    (3x256); files with a 24-byte header have no magic bytes and store the
+    palette in C order (256x3).
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsVpl('simfcs.vpl') as f:
+        >>> with SimfcsVpl(DATA / 'simfcs.vpl') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.vpl.tif')
+        ...     f.totiff(TEMP / '_simfcs.vpl.tif')
         ...     print(f.shape, data[100])
         ...
         (256, 3) [189 210 246]
-        >>> with TiffFile('_simfcs.vpl.tif') as f:
-        ...     assert_array_equal(f.asarray()[0], data)
-        ...
-
-        >>> with SimfcsVpl('imobj.vpl') as f:
-        ...     data = f.asarray()
-        ...     f.totiff('_imobj.vpl.tif')
-        ...     print(f.shape, data[100])
-        ...
-        (256, 3) [  0 254  27]
-        >>> with TiffFile('_imobj.vpl.tif') as f:
-        ...     assert_array_equal(f.asarray()[0], data)
-        ...
 
     """
 
@@ -1087,6 +1172,7 @@ class SimfcsVpl(LfdFile):
     name: str | None
     """Name of palette."""
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size and header."""
         assert self._fh is not None
@@ -1103,6 +1189,7 @@ class SimfcsVpl(LfdFile):
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint8]:
         """Return palette data as uint8 array of shape (256, 3)."""
         assert self._fh is not None
@@ -1111,14 +1198,16 @@ class SimfcsVpl(LfdFile):
             return data.reshape((256, 3))
         return data.reshape((3, 256)).T
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape((1, 256, -1))
         ax = figure.add_subplot(1, 1, 1)
-        ax.set_title(self.name if self.name else self._filename)
+        ax.set_title(self.name or self._filename)
         ax.yaxis.set_visible(False)
         ax.imshow(pal, aspect=20, origin='lower', interpolation='nearest')
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write palette to TIFF file."""
         kwargs.update(
@@ -1127,6 +1216,7 @@ class SimfcsVpl(LfdFile):
         data = numpy.expand_dims(self.asarray(), axis=0)
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return name of palette."""
         if self.name:
@@ -1144,15 +1234,12 @@ class SimfcsVpp(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsVpp('simfcs.vpp') as f:
+        >>> with SimfcsVpp(DATA / 'simfcs.vpp') as f:
         ...     data = f.asarray('nice.vpl')
-        ...     f.totiff('_simfcs.vpp.tif')
+        ...     f.totiff(TEMP / '_simfcs.vpp.tif')
         ...     print(f.shape, data[100])
         ...
         (256, 4) [ 16 255 239 255]
-        >>> with TiffFile('_simfcs.vpp.tif') as f:
-        ...     assert_array_equal(f.asarray()[35, 0], data)
-        ...
 
     """
 
@@ -1162,6 +1249,7 @@ class SimfcsVpp(LfdFile):
     names: list[str]
     """Names of palettes in file."""
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read list of palette names from file."""
         assert self._fh is not None
@@ -1182,12 +1270,10 @@ class SimfcsVpp(LfdFile):
         self.shape = 256, 4
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
-        # TODO: do not assign to class variable
-        self._figureargs = {  # type: ignore[misc]
-            'figsize': (6, len(self.names) / 6)
-        }
+        self._figureargs = {'figsize': (6, len(self.names) / 6)}  # type: ignore[misc]
 
-    def _asarray(
+    @override
+    def asarray(
         self, key: str | int = 0, *, rgba: bool = True, **kwargs: Any
     ) -> NDArray[numpy.uint8]:
         """Return palette data uint8 array of shape (256, 4).
@@ -1199,6 +1285,14 @@ class SimfcsVpp(LfdFile):
                 If True, return RGBA palette, else BGRA.
 
         """
+        self._seek()
+        return self._asarray(key=key, rgba=rgba, **kwargs)
+
+    @override
+    def _asarray(
+        self, key: str | int = 0, *, rgba: bool = True, **kwargs: Any
+    ) -> NDArray[numpy.uint8]:
+        """Return palette data uint8 array of shape (256, 4)."""
         assert self._fh is not None
         if isinstance(key, int):
             self.names[key]
@@ -1212,6 +1306,7 @@ class SimfcsVpp(LfdFile):
             data[:, 3] = 255  # fix transparency
         return data
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display all palettes stored in file."""
         figure.subplots_adjust(top=0.96, bottom=0.02, left=0.18, right=0.95)
@@ -1234,6 +1329,7 @@ class SimfcsVpp(LfdFile):
                 horizontalalignment='right',
             )
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write all palettes to TIFF file."""
         kwargs.update(
@@ -1248,6 +1344,7 @@ class SimfcsVpp(LfdFile):
             kwargs['description'] = name
             tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return names of all palettes in file."""
         return indent('names:', *self.names)
@@ -1269,7 +1366,7 @@ class SimfcsJrn(LfdFile):
         lower: Convert keys to lower case.
 
     Examples:
-        >>> with SimfcsJrn('simfcs.jrn', lower=True) as f:
+        >>> with SimfcsJrn(DATA / 'simfcs.jrn', lower=True) as f:
         ...     f[1]['paramters for tracking']['samplimg frequency']  # typo
         ...
         15625
@@ -1363,6 +1460,7 @@ class SimfcsJrn(LfdFile):
     _lower: bool
     _records: list[dict[str, str]]
 
+    @override
     def _init(self, *, lower: bool = False, **kwargs: Any) -> None:
         """Read journal file and parse into list of dictionaries."""
         assert self._fh is not None
@@ -1401,11 +1499,13 @@ class SimfcsJrn(LfdFile):
             self._records.append(recdict)
         self.close()
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
         msg = 'SimfcsJrn file does not contain array data'
         raise ValueError(msg)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         msg = 'SimfcsJrn file does not contain image data'
@@ -1420,16 +1520,16 @@ class SimfcsJrn(LfdFile):
         lower: bool,
     ) -> dict[str, Any]:
         """Return dictionary of keys and values in journal string."""
-        # TODO: the last value is not parsed!
         if result is None:
             result = {}
         keyval = re.split(repattern, journal, maxsplit=0)
         keyval = [s.strip('* :;=\n\r\t') for s in keyval]
-        val = [astype(re.sub(SimfcsJrn._skip, '', v)) for v in keyval[2:-1:2]]
+        val = [astype(re.sub(SimfcsJrn._skip, '', v)) for v in keyval[2::2]]
         key = [k.lower() if lower else k for k in keyval[1:-1:2]]
         result.update(zip(key, val, strict=False))
         return result
 
+    @override
     def _str(self) -> str | None:
         """Return string with information about file."""
         comments = 'comments' if self._lower else 'COMMENTS'
@@ -1460,7 +1560,9 @@ class SimfcsBin(LfdFile):
 
     SimFCS BIN and RAW files contain homogeneous array data of any type and
     shape, stored C-contiguously in little-endian byte order.
-    A common format is: shape=(256, 256), dtype='uint16'.
+    The files do not store shape, data type, or metadata. External knowledge
+    is required to interpret the payload correctly. A common format is
+    `shape=(256, 256), dtype='uint16'`.
 
     Parameters:
         filename:
@@ -1478,20 +1580,19 @@ class SimfcsBin(LfdFile):
 
     Examples:
         >>> with SimfcsBin(
-        ...     'simfcs.bin', shape=(-1, 256, 256), dtype='uint16'
+        ...     DATA / 'simfcs.bin', shape=(-1, 256, 256), dtype='uint16'
         ... ) as f:
         ...     data = f.asarray(memmap=True)
-        ...     f.totiff('_simfcs.bin.tif', compression='zlib')
+        ...     f.totiff(TEMP / '_simfcs.bin.tif', compression='zlib')
         ...     print(f.shape, data[751, 127, 127])
         (752, 256, 256) 1
-        >>> with TiffFile('_simfcs.bin.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.(bin|raw)$'
+    _probe_priority = 100  # most generic format, try last
 
+    @override
     def _init(
         self,
         *,
@@ -1524,16 +1625,23 @@ class SimfcsBin(LfdFile):
         else:
             msg = 'shape and dtype do not match file size'
             raise LfdFileError(self, msg)
-        self.dtype = numpy.dtype(dtype)
+        self.dtype = numpy.dtype(d)
         self._fh.seek(offset)
 
-    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+    @override
+    def asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
         """Return data as array of specified shape and type.
 
         Parameters:
             memmap: Return a read-only memory-map to the data array on disk.
 
         """
+        self._seek()
+        return self._asarray(memmap=memmap, **kwargs)
+
+    @override
+    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+        """Return data as array of specified shape and type."""
         assert self._fh is not None
         assert self.dtype is not None
         assert self.shape is not None
@@ -1549,6 +1657,7 @@ class SimfcsBin(LfdFile):
         data = numpy.fromfile(self._fh, dtype, count=product(self.shape))
         return data.reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -1560,27 +1669,26 @@ SimfcsRaw = SimfcsBin
 class SimfcsInt(LfdFile):
     """SimFCS intensity image.
 
-    SimFCS INT files contain a single intensity image, stored as 256x256
-    float32 or uint16 (older format). The measurement extension is usually
-    encoded in the file name.
+    SimFCS INT files contain a single intensity image stored as 256x256
+    values without any header. The data type is determined by file size:
+    262144-byte files contain float32 data; 131072-byte files contain uint16
+    data (older format). The measurement extension is usually encoded in the
+    file name.
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsInt('simfcs2036.int') as f:
+        >>> with SimfcsInt(DATA / 'simfcs2036.int') as f:
         ...     print(f.asarray()[255, 255])
         ...
         3.0
-        >>> with SimfcsInt('simfcs1006.int') as f:
-        ...     print(f.asarray()[255, 255])
-        ...
-        9
 
     """
 
     _filepattern = r'.*\.(int|ac)$'
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 256 KB."""
         if self._filesize == 262144:
@@ -1593,11 +1701,13 @@ class SimfcsInt(LfdFile):
         self.shape = 256, 256
         self.axes = 'YX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16 | numpy.float32]:
         """Return data as 256x256 array of float32 or uint16."""
         assert self._fh is not None
         return numpy.fromfile(self._fh, self.dtype).reshape((256, 256))
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -1617,7 +1727,7 @@ class SimfcsIntPhsMod(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsIntPhsMod('simfcs_1000.phs') as f:
+        >>> with SimfcsIntPhsMod(DATA / 'simfcs_1000.phs') as f:
         ...     print(f.asarray().mean((1, 2)))
         ...
         [5.717 0 0.04645]
@@ -1627,6 +1737,7 @@ class SimfcsIntPhsMod(LfdFile):
     _filepattern = r'.*\.(int|phs|mod)$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 8)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 256 KB."""
         if self._filesize != 262144:
@@ -1636,10 +1747,13 @@ class SimfcsIntPhsMod(LfdFile):
         self.shape = 256, 256
         self.axes = 'YX'
 
-    def _components(self) -> list[tuple[str, str]]:
+    @classmethod
+    @override
+    def _components(cls, filename: str, /) -> list[tuple[str, str]]:
         """Return possible names of component files."""
-        return [(c, self._filename[:-3] + c) for c in ('int', 'phs', 'mod')]
+        return [(c, filename[:-3] + c) for c in ('int', 'phs', 'mod')]
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image data as float32 array of shape (256, 256)."""
         assert self._fh is not None
@@ -1647,11 +1761,13 @@ class SimfcsIntPhsMod(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False, metadata=None)
         tif.write(self.asarray(), **kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
@@ -1684,8 +1800,8 @@ class SimfcsFit(LfdFile):
 
     SimFCS FIT files contain results from image scan analysis.
     The fit parameters are stored as a 1024x16 float64 array, followed by
-    an 8 bytes buffer and the intensity image used for the fit, stored as
-    a 256x256 float32 array.
+    an 8-byte buffer and the intensity image used for the fit, stored as
+    a 256x256 float32 array. The purpose of the 8-byte buffer is unknown.
 
     The 16 fit parameters are::
 
@@ -1697,7 +1813,7 @@ class SimfcsFit(LfdFile):
         D1 (um2/s)
         G2
         D2 (um2/s)
-        Exp aplitude
+        Exp aplitude  (actual spelling in file format)
         Exp time/Ch1 int
         Triplet rate/Ch2 int
         Fraction vesicle
@@ -1710,16 +1826,13 @@ class SimfcsFit(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsFit('simfcs.fit') as f:
+        >>> with SimfcsFit(DATA / 'simfcs.fit') as f:
         ...     dc_ref = f.asarray()
         ...     p_fit = f.p_fit(size=7)
-        ...     f.totiff('_simfcs.fit.tif')
+        ...     f.totiff(TEMP / '_simfcs.fit.tif')
         ...     print(f'{p_fit[6, 1, 1]:.3f} {dc_ref[128, 128]:.2f}')
         ...
         0.937 20.23
-        >>> with TiffFile('_simfcs.fit.tif') as f:
-        ...     assert_array_equal(f.asarray(), dc_ref)
-        ...
 
     """
 
@@ -1753,24 +1866,26 @@ class SimfcsFit(LfdFile):
         'Velocity y',
     )
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Validate file size is 384 KB."""
         if self._filesize != 393224:
             msg = 'file size mismatch'
             raise LfdFileError(self, msg)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
-        """Return intensity image as NumPy arrays."""
+        """Return intensity image as NumPy array."""
         return self.dc_ref()
 
     def dc_ref(self) -> NDArray[numpy.float32]:
-        """Return intensity image as NumPy arrays."""
+        """Return intensity image as NumPy array."""
         assert self._fh is not None
         self._fh.seek(131080)
         return numpy.fromfile(self._fh, '<f4', 65536).reshape((256, 256))
 
     def p_fit(self, size: int = 32) -> NDArray[numpy.float64]:
-        """Return fit parameters as NumPy arrays.
+        """Return fit parameters as NumPy array.
 
         Parameters:
             size: Number of rows and columns of fit parameters array.
@@ -1784,12 +1899,14 @@ class SimfcsFit(LfdFile):
         p_fit = numpy.fromfile(self._fh, '<f8', 16384).reshape((1024, 16))
         return p_fit[: size * size].reshape((size, size, 16))
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image and fit data to TIFF file."""
         update_kwargs(kwargs, contiguous=False, metadata=None)
         tif.write(self.dc_ref(), description='dc_ref', **kwargs)
         tif.write(self.p_fit(), description='p_fit', **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         return 'dc_ref: (256, 256) float32\np_fit: (32, 32, 16) float64'
@@ -1812,21 +1929,19 @@ class SimfcsCyl(LfdFile):
             Number of channels, orbits, and points per orbit.
 
     Examples:
-        >>> with SimfcsCyl('simfcs.cyl') as f:
+        >>> with SimfcsCyl(DATA / 'simfcs.cyl') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.cyl.tif')
+        ...     f.totiff(TEMP / '_simfcs.cyl.tif')
         ...     print(f.shape, data[0, -1, :4])
         ...
         (2, 3291, 256) [109 104 105 112]
-        >>> with TiffFile('_simfcs.cyl.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.cyl$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 3)}
 
+    @override
     def _init(
         self, *, shape: tuple[int, int, int] = (2, -1, 256), **kwargs: Any
     ) -> None:
@@ -1839,17 +1954,18 @@ class SimfcsCyl(LfdFile):
             msg = f'{points_per_orbit=} out of range [1..256]'
             raise ValueError(msg)
         if orbits <= 0:
-            orbits = points_per_orbit * channels * 2
-            if self._filesize % orbits:
+            frame_size = points_per_orbit * channels * 2
+            if self._filesize % frame_size:
                 msg = 'invalid shape'
                 raise LfdFileError(self, msg)
-            orbits = int(self._filesize // orbits)
+            orbits = int(self._filesize // frame_size)
         elif self._filesize != points_per_orbit * orbits * channels * 2:
             msg = 'invalid shape'
             raise LfdFileError(self, msg)
         self.shape = channels, orbits, points_per_orbit
         self.dtype = numpy.dtype('<u2')
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16]:
         """Return data as (channels, -1, points_per_orbit) array of uint16."""
         assert self._fh is not None
@@ -1857,6 +1973,7 @@ class SimfcsCyl(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
@@ -1871,12 +1988,14 @@ class SimfcsCyl(LfdFile):
         ax.imshow(ch1.T, aspect='auto', **kwargs)
         pyplot.setp(ax.get_xticklabels(), visible=False)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False, metadata=None)
         for data in self.asarray():
             tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         assert self.shape is not None
@@ -1889,8 +2008,9 @@ class SimfcsRef(LfdFile):
     """SimFCS referenced fluorescence lifetime images.
 
     SimFCS REF files contain referenced fluorescence lifetime image data.
-    Five square shape (usually 256x256) float32 images are stored
-    consecutively:
+    Five square float32 images are stored consecutively. The image size is
+    not stored explicitly and must be inferred from the total file size.
+    Common files contain 256x256 images:
 
     0. dc - intensity
     1. ph1 - phase of 1st harmonic
@@ -1905,21 +2025,19 @@ class SimfcsRef(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsRef('simfcs.ref') as f:
+        >>> with SimfcsRef(DATA / 'simfcs.ref') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.ref.tif')
+        ...     f.totiff(TEMP / '_simfcs.ref.tif')
         ...     print(f.shape, data[:, 255, 255])
         ...
         (5, 256, 256) [301.3 44.71 0.6185 68.13 0.3174]
-        >>> with TiffFile('_simfcs.ref.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.ref$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 11)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is as expected."""
         if self._filesize > 4294967295:
@@ -1933,6 +2051,7 @@ class SimfcsRef(LfdFile):
         self.dtype = numpy.dtype('<f4')
         self.axes = 'SYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return images as float32 array of shape (-1, 256, 256)."""
         assert self._fh is not None
@@ -1940,6 +2059,7 @@ class SimfcsRef(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
@@ -1968,6 +2088,7 @@ class SimfcsRef(LfdFile):
                 ax.set_axis_off()
                 ax.imshow(img, **kwargs)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=True)
@@ -1991,20 +2112,18 @@ class SimfcsBh(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with SimfcsBh('simfcs.b&h') as f:
+        >>> with SimfcsBh(DATA / 'simfcs.b&h') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.b&h.tif')
+        ...     f.totiff(TEMP / '_simfcs.b&h.tif')
         ...     print(f.shape, data[59, 1, 84])
         ...
         (256, 256, 256) 12.0
-        >>> with TiffFile('_simfcs.b&h.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.(b&h)$'
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is multiple of 262144."""
         if self._filesize % 262144:
@@ -2013,6 +2132,7 @@ class SimfcsBh(LfdFile):
         self.dtype = numpy.dtype('<f4')
         self.axes = 'QYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image as float32 array of shape (-1, 256, 256)."""
         assert self._fh is not None
@@ -2020,6 +2140,7 @@ class SimfcsBh(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, compression='zlib', contiguous=False)
@@ -2044,19 +2165,17 @@ class SimfcsBhz(SimfcsBh):
     SimFCS BHZ files contain time-domain fluorescence lifetime histogram data,
     acquired from Becker and Hickl(r) TCSPC cards, or converted from other
     data sources.
-    SimFCS BHZ files are zipped B&H files: a Zip archive containing a single
-    B&H file.
+    SimFCS BHZ files are ZIP archives containing a single B&H file. The inner
+    file stores the same sequence of float32 images as described for
+    :py:class:`SimfcsBh`.
 
     Examples:
-        >>> with SimfcsBhz('simfcs.bhz') as f:
+        >>> with SimfcsBhz(DATA / 'simfcs.bhz') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.bhz.tif')
+        ...     f.totiff(TEMP / '_simfcs.bhz.tif')
         ...     print(f.shape, data[59, 1, 84])
         ...
         (256, 256, 256) 12.0
-        >>> with TiffFile('_simfcs.bhz.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -2064,6 +2183,7 @@ class SimfcsBhz(SimfcsBh):
 
     _fh: IO[bytes]
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify Zip file contains file with size multiple of 262144."""
         with zipfile.ZipFile(self._fh) as zf:
@@ -2077,6 +2197,7 @@ class SimfcsBhz(SimfcsBh):
         self.dtype = numpy.dtype('<f4')
         self.axes = 'QYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image as float32 array of shape (256, 256, 256)."""
         assert self._fh is not None
@@ -2085,21 +2206,18 @@ class SimfcsBhz(SimfcsBh):
             data = zf.read(zf.filelist[0])
         return numpy.frombuffer(data, self.dtype).reshape(self.shape).copy()
 
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        update_kwargs(kwargs, compression='zlib', contiguous=False)
-        tif.write(self.asarray(), **kwargs)
-
 
 class SimfcsB64(LfdFile):
     """SimFCS integer intensity data.
 
     SimFCS B64 files contain one or more square intensity images, a carpet
     of lines, or a stream of intensity data.
-    The intensity data are stored as int16 contiguously after one int32
-    defining the image size in x and/or y dimensions if applicable.
+    The first 4 bytes store the square image size as int32. The remaining
+    payload stores contiguous int16 values.
     The measurement extension and 'carpet' identifier are usually encoded
-    in the file name.
+    in the file name. The file contents are not fully self-describing: the
+    same layout may represent one image, multiple square images, a carpet, or
+    a 1D stream of intensity values.
 
     Parameters:
         filename:
@@ -2110,20 +2228,18 @@ class SimfcsB64(LfdFile):
             Maximum square image length.
 
     Examples:
-        >>> with SimfcsB64('simfcs.b64') as f:
+        >>> with SimfcsB64(DATA / 'simfcs.b64') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.b64.tif', compression='zlib')
+        ...     f.totiff(TEMP / '_simfcs.b64.tif', compression='zlib')
         ...     print(f.shape, data[101, 255, 255])
         ...
         (102, 256, 256) 0
-        >>> with TiffFile('_simfcs.b64.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.b64$'
 
+    @override
     def _init(
         self,
         *,
@@ -2161,6 +2277,7 @@ class SimfcsB64(LfdFile):
             self.shape = (int(fsize // size), *self.shape)
             self.axes = 'IYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.int16]:
         """Return intensity data as 1D, 2D, or 3D array of int16."""
         assert self._fh is not None
@@ -2170,6 +2287,7 @@ class SimfcsB64(LfdFile):
         data = numpy.fromfile(self._fh, '<' + self.dtype.char, count=count)
         return data.reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -2197,9 +2315,9 @@ def simfcsb64_write(
         ...     .reshape((5, 256, 256))
         ...     .astype('int16')
         ... )
-        >>> simfcsb64_write('_test.b64', data)
-        >>> with SimfcsB64('_test.b64') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> simfcsb64_write(TEMP / '_test.b64', data)
+        >>> with SimfcsB64(TEMP / '_test.b64') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -2212,7 +2330,7 @@ def simfcsb64_write(
         msg = f'invalid {data.shape=!r} != (-1, size, size)'
         raise ValueError(msg)
     with open(filename, 'wb') as fh:
-        fh.write(struct.pack('I', data.shape[-1]))
+        fh.write(struct.pack('<i', data.shape[-1]))
         data.tofile(fh)
 
 
@@ -2223,7 +2341,8 @@ class SimfcsI64(LfdFile):
     Zlib deflate compressed stream of one int32 (defining the image size in
     x and y dimensions) and the float32 image data.
     The measurement extension is usually encoded in the file name.
-    Update 2020: Sometimes multiple images are stored in I64 files.
+    Some files with an `.i64` extension contain multiple images instead of a
+    single image.
 
     Parameters:
         filename:
@@ -2234,20 +2353,18 @@ class SimfcsI64(LfdFile):
             Maximum square image length.
 
     Examples:
-        >>> with SimfcsI64('simfcs1000.i64') as f:
+        >>> with SimfcsI64(DATA / 'simfcs1000.i64') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs1000.i64.tif')
+        ...     f.totiff(TEMP / '_simfcs1000.i64.tif')
         ...     print(f.shape, data[128, 128])
         ...
         (256, 256) 12.3125
-        >>> with TiffFile('_simfcs1000.i64.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.i64$'
 
+    @override
     def _init(
         self,
         *,
@@ -2267,6 +2384,7 @@ class SimfcsI64(LfdFile):
         self.dtype = numpy.dtype(dtype)
         self.axes = 'YX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 2D array of float32."""
         assert self._fh is not None
@@ -2283,6 +2401,7 @@ class SimfcsI64(LfdFile):
             data = data.reshape((-1, self.shape[0], self.shape[1]))
         return data
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -2305,9 +2424,9 @@ def simfcsi64_write(
 
     Examples:
         >>> data = numpy.arange(256 * 256).reshape((256, 256)).astype('f4')
-        >>> simfcsi64_write('_test.i64', data)
-        >>> with SimfcsI64('_test.i64') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> simfcsi64_write(TEMP / '_test.i64', data)
+        >>> with SimfcsI64(TEMP / '_test.i64') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -2318,7 +2437,7 @@ def simfcsi64_write(
     if data.ndim != 2 or data.shape[0] != data.shape[1]:
         msg = f'{data.shape=!r} != (size, size)'
         raise ValueError(msg)
-    rawdata = struct.pack('I', data.shape[0]) + data.tobytes()
+    rawdata = struct.pack('<I', data.shape[0]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
         fh.write(rawdata)
@@ -2330,11 +2449,11 @@ class SimfcsZ64(LfdFile):
     SimFCS Z64 files contain stacks of square images such as intensity volumes
     or time-domain fluorescence lifetime histograms acquired from
     Becker and Hickl(r) TCSPC cards.
-    The data are stored as Zlib deflate compressed stream of two int32
-    (defining the image size in x and y dimensions and the number of images)
-    and a maximum of 256 square float32 images.
-    For file names containing 'allDC', older versions of SimFCS 4 mistakenly
-    write the header twice and report the wrong number of images.
+    The data are stored as a Zlib deflate compressed stream of two int32
+    values, defining the image size and number of images, followed by float32
+    image data.
+    Some legacy files, especially names containing 'allDC', contain a
+    duplicated header or report an incorrect image count.
 
     Parameters:
         filename:
@@ -2347,31 +2466,19 @@ class SimfcsZ64(LfdFile):
             File contains two copies of header.
 
     Examples:
-        >>> with SimfcsZ64('simfcs.z64') as f:
+        >>> with SimfcsZ64(DATA / 'simfcs.z64') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.z64.tif')
+        ...     f.totiff(TEMP / '_simfcs.z64.tif')
         ...     print(f.shape, data[142, 128, 128])
         ...
         (256, 256, 256) 2.0
-        >>> with TiffFile('_simfcs.z64.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
-
-        >>> with SimfcsZ64('simfcs_allDC.z64', doubleheader=True) as f:
-        ...     data = f.asarray()
-        ...     f.totiff('_simfcs_allDC.z64.tif')
-        ...     print(f.shape, data[128, 128])
-        ...
-        (256, 256) 172.0
-        >>> with TiffFile('_simfcs_allDC.z64.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.(z64|i64)$'
     _filesizemin = 32
 
+    @override
     def _init(
         self,
         *,
@@ -2396,6 +2503,7 @@ class SimfcsZ64(LfdFile):
             self.axes = 'QYX'
         self.dtype = numpy.dtype(dtype)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 3D array of float32."""
         assert self._fh is not None
@@ -2412,6 +2520,7 @@ class SimfcsZ64(LfdFile):
         except ValueError:
             return data[2:].reshape(self.shape[1:])
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, compression='zlib', contiguous=False)
@@ -2450,9 +2559,9 @@ def simfcsz64_write(
         >>> data = (
         ...     numpy.arange(5 * 256 * 256).reshape((5, 256, 256)).astype('f4')
         ... )
-        >>> simfcsz64_write('_test.z64', data)
-        >>> with SimfcsZ64('_test.z64') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> simfcsz64_write(TEMP / '_test.z64', data)
+        >>> with SimfcsZ64(TEMP / '_test.z64') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -2463,7 +2572,7 @@ def simfcsz64_write(
     if data.ndim != 3 or data.shape[1] != data.shape[2]:
         msg = f'{data.shape=!r} != (-1, size, size)'
         raise ValueError(msg)
-    rawdata = struct.pack('II', data.shape[2], data.shape[0]) + data.tobytes()
+    rawdata = struct.pack('<II', data.shape[2], data.shape[0]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
         fh.write(rawdata)
@@ -2493,20 +2602,18 @@ class SimfcsR64(SimfcsRef):
             Maximum square length of image array.
 
     Examples:
-        >>> with SimfcsR64('simfcs.r64') as f:
+        >>> with SimfcsR64(DATA / 'simfcs.r64') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_simfcs.r64.tif')
+        ...     f.totiff(TEMP / '_simfcs.r64.tif')
         ...     print(f.shape, data[:, 100, 200])
         ...
         (5, 256, 256) [0.25 23.22 0.642 104.3 2.117]
-        >>> with TiffFile('_simfcs.r64.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.r64$'
 
+    @override
     def _init(
         self,
         *,
@@ -2527,6 +2634,7 @@ class SimfcsR64(SimfcsRef):
         self.dtype = numpy.dtype(dtype)
         self.axes = 'SYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return data as 3D array of float32."""
         assert self._fh is not None
@@ -2538,6 +2646,7 @@ class SimfcsR64(SimfcsRef):
         data = data[: product(self.shape)].copy()  # make writable
         return data.reshape((-1, self.shape[1], self.shape[2]))
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(
@@ -2546,8 +2655,7 @@ class SimfcsR64(SimfcsRef):
         label = 'dc'
         for i, image in enumerate(self.asarray()):
             if i > 0:
-                i1 = i + 1
-                label = f'ph{i1 // 2}' if i1 % 2 else f'md{i1 // 2}'
+                label = f'ph{(i + 1) // 2}' if i % 2 else f'md{i // 2}'
             tif.write(image, description=label, **kwargs)
 
 
@@ -2571,9 +2679,9 @@ def simfcsr64_write(
         >>> data = (
         ...     numpy.arange(5 * 256 * 256).reshape((5, 256, 256)).astype('f4')
         ... )
-        >>> simfcsr64_write('_test.r64', data)
-        >>> with SimfcsR64('_test.r64') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> simfcsr64_write(TEMP / '_test.r64', data)
+        >>> with SimfcsR64(TEMP / '_test.r64') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -2584,7 +2692,7 @@ def simfcsr64_write(
     if data.ndim != 3 or data.shape[0] < 5 or data.shape[1] != data.shape[2]:
         msg = f'invalid {data.shape=!r}'
         raise ValueError(msg)
-    rawdata = struct.pack('I', data.shape[-1]) + data.tobytes()
+    rawdata = struct.pack('<I', data.shape[-1]) + data.tobytes()
     rawdata = zlib.compress(rawdata)
     with open(filename, 'wb') as fh:
         fh.write(rawdata)
@@ -2597,7 +2705,7 @@ class SimfcsGpSeries(LfdFileSequence):
     separate :py:class:`SimfcsInt` files with consecutive names.
 
     Examples:
-        >>> ims = SimfcsGpSeries('gpint/v*.int')
+        >>> ims = SimfcsGpSeries(DATA / 'gpint/v*.int')
         >>> ims.axes
         'CI'
         >>> ims = ims.asarray()
@@ -2621,24 +2729,20 @@ class FlimboxFbd(LfdFile):
     FlimboxFbd is a light wrapper around the fbdfile.FbdFile class.
 
     Examples:
-        >>> with FlimboxFbd('flimbox_data$CBCO.fbd') as f:
+        >>> with FlimboxFbd(DATA / 'flimbox_data$CBCO.fbd') as f:
         ...     f.laser_frequency
         ...     bins, times, markers = f.decode(
         ...         word_count=500000, skip_words=1900000
         ...     )
         ...
         20000000.0
-        >>> print(bins[0, :2], times[:2], markers)
-        [53 51] [ 0 42] [ 44097 124815]
-        >>> hist = [numpy.bincount(b[b >= 0]) for b in bins]
-        >>> int(numpy.argmax(hist[0]))
-        53
 
     """
 
     _filepattern = r'.*\.fbd$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 5)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Initialize instance from file name code or file header."""
         from fbdfile import FbdFile
@@ -2661,14 +2765,17 @@ class FlimboxFbd(LfdFile):
         # self.dtype = ...
         # self.axes = ...
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return cross correlation phase index of shape (channels, size)."""
         return self._fbd.decode(**kwargs)[0]
 
+    @override
     def _close(self) -> None:
         """Close FBD file."""
         self._fbd.close()
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot lifetime histogram for all channels."""
         assert pyplot is not None
@@ -2686,12 +2793,15 @@ class FlimboxFbd(LfdFile):
             ax.plot(histogram, label=f'Ch{ch}')
         ax.legend()
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         return str(self._fbd).split('\n', 1)[-1]
 
     def __getattr__(self, name: str, /) -> Any:
         """Return attributes from FdbFile instance."""
+        if name == '_fbd':
+            raise AttributeError(name)
         try:
             attr = getattr(self._fbd, name)
         except Exception as exc:
@@ -2722,7 +2832,7 @@ class FlimboxFbs(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with FlimboxFbs('flimbox_settings.fbs.xml') as f:
+        >>> with FlimboxFbs(DATA / 'flimbox_settings.fbs.xml') as f:
         ...     f['ScanParams']['ExcitationFrequency']
         ...
         20000000
@@ -2736,6 +2846,7 @@ class FlimboxFbs(LfdFile):
 
     _settings: dict[str, Any]
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read and parse XML."""
         from fbdfile import fbs_read
@@ -2756,16 +2867,19 @@ class FlimboxFbs(LfdFile):
         """Return settings as dict."""
         return copy.deepcopy(self._settings)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
         msg = 'FlimboxFbs file does not contain array data'
         raise ValueError(msg)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         msg = 'FlimboxFbs file does not contain image data'
         raise ValueError(msg)
 
+    @override
     def _str(self) -> str | None:
         """Return string with settings."""
         return format_dict(self._settings)
@@ -2799,7 +2913,7 @@ class FlimboxFbf(LfdFile):
             Maximum length of header.
 
     Examples:
-        >>> with FlimboxFbf('flimbox_firmware.fbf') as f:
+        >>> with FlimboxFbf(DATA / 'flimbox_firmware.fbf') as f:
         ...     f['windows']
         ...     f['channels']
         ...     f['secondharmonic']
@@ -2818,6 +2932,7 @@ class FlimboxFbf(LfdFile):
     _settings: dict[str, Any]
     _maxheaderlength: int
 
+    @override
     def _init(self, *, maxheaderlength: int = 1024, **kwargs: Any) -> None:
         """Read and parse NULL terminated header string."""
         from fbdfile import fbf_read
@@ -2856,16 +2971,19 @@ class FlimboxFbf(LfdFile):
         """Return settings as dict."""
         return copy.deepcopy(self._settings)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Raise ValueError."""
         msg = 'FlimboxFbf file does not contain array data'
         raise ValueError(msg)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         msg = 'FlimboxFbf file does not contain image data'
         raise ValueError(msg)
 
+    @override
     def _str(self) -> str | None:
         """Return string with header settings."""
         return format_dict(self._settings)
@@ -2895,7 +3013,7 @@ class GlobalsLif(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with GlobalsLif('globals.lif') as f:
+        >>> with GlobalsLif(DATA / 'globals.lif') as f:
         ...     print(len(f), f[42]['date'], f[42].asarray().shape)
         ...
         43 1987.8.8 (5, 11)
@@ -2939,6 +3057,7 @@ class GlobalsLif(LfdFile):
         def __str__(self) -> str:
             return format_dict(self)
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size and read all records."""
         assert self._fh is not None
@@ -2969,6 +3088,17 @@ class GlobalsLif(LfdFile):
             records.append(record)
         self._records = records
 
+    @override
+    def asarray(
+        self,
+        key: int = 0,
+        **kwargs: Any,
+    ) -> NDArray[numpy.float64]:
+        """Return freq, phi, mod, dp, dm of selected record as NumPy array."""
+        self._seek()
+        return self._asarray(key=key, **kwargs)
+
+    @override
     def _asarray(
         self,
         key: int = 0,
@@ -2979,6 +3109,7 @@ class GlobalsLif(LfdFile):
             return self._records[key].asarray()
         return numpy.empty((5, 0), numpy.float64)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot all phase and modulation vs log of frequency."""
         assert pyplot is not None
@@ -3017,11 +3148,13 @@ class GlobalsLif(LfdFile):
             ax.semilogx(rec['frequency'], rec['deltap'], '+-')
             ax.semilogx(rec['frequency'], rec['deltam'], '.-')
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         msg = 'GlobalsLif file does not contain image data'
         raise ValueError(msg)
 
+    @override
     def _str(self) -> str | None:
         """Return string with information about file."""
         return f'records: {len(self._records)}'
@@ -3056,7 +3189,7 @@ class GlobalsAscii(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with GlobalsAscii('FLOP.001') as f:
+        >>> with GlobalsAscii(DATA / 'FLOP.001') as f:
         ...     print(f['experiment'], f.asarray().shape)
         ...
         LIFETIME (5, 20)
@@ -3070,6 +3203,7 @@ class GlobalsAscii(LfdFile):
 
     _record: dict[str, Any]
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read file and parse into dictionary and data array."""
         assert self._fh is not None
@@ -3125,10 +3259,12 @@ class GlobalsAscii(LfdFile):
         self._record['data'] = labels
         self.close()
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return array data as NumPy array."""
         return self.__data.copy()
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Plot phase and modulation vs log of frequency."""
         assert pyplot is not None
@@ -3152,11 +3288,13 @@ class GlobalsAscii(LfdFile):
         ax.semilogx(data[0], data[4] * 100, 'gx-')
         ax.set_xlabel('Frequency (MHz)')
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         msg = 'GlobalsAscii file does not contain image data'
         raise ValueError(msg)
 
+    @override
     def _str(self) -> str:
         """Return string with information about file."""
         return format_dict(self._record)
@@ -3178,7 +3316,7 @@ class VistaIfi(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> f = VistaIfi('vista.ifi')
+        >>> f = VistaIfi(DATA / 'vista.ifi')
         >>> data = f.asarray()
         >>> f.axes
         'CYX'
@@ -3186,11 +3324,8 @@ class VistaIfi(LfdFile):
         0.1
         >>> data.shape
         (2, 128, 128)
-        >>> f.totiff('_vista.ifi.tif')
+        >>> f.totiff(TEMP / '_vista.ifi.tif')
         >>> f.close()
-        >>> with TiffFile('_vista.ifi.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -3211,6 +3346,7 @@ class VistaIfi(LfdFile):
         ]
     )
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read header and metadata from file."""
         assert self._fh is not None
@@ -3245,6 +3381,7 @@ class VistaIfi(LfdFile):
         bits = self.header['channel_bits']
         return tuple(i for i in range(8) if bits & 2**i)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image data from file."""
         assert self._fh is not None
@@ -3255,12 +3392,14 @@ class VistaIfi(LfdFile):
         data.shape = self.shape
         return data
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, metadata={'axes': self.axes})
         data = self.asarray()
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         assert self._header_t.names is not None
@@ -3291,17 +3430,14 @@ class VistaIfli(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> f = VistaIfli('vista.ifli')
+        >>> f = VistaIfli(DATA / 'vista.ifli')
         >>> data = f.asarray(memmap=True)
         >>> f.header['ModFrequency']
         (48000000.0, 96000000.0)
         >>> data.shape
         (1, 1, 1, 2, 1, 128, 128, 2, 3)
-        >>> f.totiff('_vista.ifli.tif')
+        >>> f.totiff(TEMP / '_vista.ifli.tif')
         >>> f.close()
-        >>> with TiffFile('_vista.ifli.tif') as f:
-        ...     assert_array_equal(f.asarray()[0, 0], data[..., 0, 0])
-        ...
 
     """
 
@@ -3314,6 +3450,7 @@ class VistaIfli(LfdFile):
     offsets: dict[str, Any]
     """Data offsets from file header."""
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read header and metadata from file."""
         assert self._fh is not None
@@ -3486,7 +3623,8 @@ class VistaIfli(LfdFile):
         bits = self.header['ChannelNumbers']
         return tuple(i for i in range(self.shape[3]) if bits & 2**i)
 
-    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+    @override
+    def asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
         """Return average intensity and phasor coordinates from file.
 
         The returned array is of shape (position, wavelength, time, channel,
@@ -3494,7 +3632,16 @@ class VistaIfli(LfdFile):
         The three samples are the average intensity (DC) and the real (g) and
         imaginary (s) parts of the phasor.
 
+        Parameters:
+            memmap: If True, use `numpy.memmap` to read array.
+
         """
+        self._seek()
+        return self._asarray(memmap=memmap, **kwargs)
+
+    @override
+    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+        """Return average intensity and phasor coordinates from file."""
         assert self._fh is not None
         assert self.shape is not None
         offset = self.offsets['PhasorPixelData']
@@ -3511,6 +3658,7 @@ class VistaIfli(LfdFile):
         phasor = numpy.fromfile(self._fh, '<f4', product(self.shape))
         return phasor.reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         assert pyplot is not None
@@ -3527,6 +3675,7 @@ class VistaIfli(LfdFile):
             photometric='MINISBLACK',
         )
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False)
@@ -3535,6 +3684,7 @@ class VistaIfli(LfdFile):
         data = numpy.moveaxis(data, -1, 0)
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         return indent(
@@ -3568,7 +3718,7 @@ class FlimfastFlif(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> f = FlimfastFlif('flimfast.flif')
+        >>> f = FlimfastFlif(DATA / 'flimfast.flif')
         >>> data = f.asarray()
         >>> float(f.header.frequency)
         80.652...
@@ -3576,11 +3726,8 @@ class FlimfastFlif(LfdFile):
         348.75
         >>> int(data[31, 219, 299])
         366
-        >>> f.totiff('_flimfast.flif.tif')
+        >>> f.totiff(TEMP / '_flimfast.flif.tif')
         >>> f.close()
-        >>> with TiffFile('_flimfast.flif.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -3632,6 +3779,7 @@ class FlimfastFlif(LfdFile):
         ]
     )  # ('padding', 'u4', 11)
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read header and record metadata from file."""
         assert self._fh is not None
@@ -3672,6 +3820,7 @@ class FlimfastFlif(LfdFile):
         self.dtype = numpy.dtype('<u2')
         self.axes = 'PYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16]:
         """Return images as uint16 array of shape (records, height, width)."""
         assert self._fh is not None
@@ -3685,6 +3834,7 @@ class FlimfastFlif(LfdFile):
             self._fh.seek(64, 1)
         return data.reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write phase images and metadata to TIFF file."""
         metadata = {}
@@ -3705,6 +3855,7 @@ class FlimfastFlif(LfdFile):
         for data in self.asarray():
             tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return file header as string."""
         assert self._header_t.names is not None
@@ -3720,31 +3871,30 @@ class FlimageBin(LfdFile):
 
     FLImage BIN files contain referenced fluorescence lifetime image data
     from frequency-domain measurements.
-    Three 300x220 big-endian float32 images are stored in separate files:
-    intensity (``.int.bin``), phase (``.phi.bin``) and modulation
-    (``.mod.bin``), respectively single apparent lifetimes from phase
-    (``.tph.bin``) and modulation (``.tmd.bin``).
+    Three 300x220 big-endian float32 images are stored in separate files,
+    in one of two variants: phase images (intensity ``.int.bin``, phase
+    ``.phi.bin``, modulation ``.mod.bin``) or lifetime images (intensity
+    ``.int.bin``, apparent lifetime from phase ``.tph.bin``, apparent
+    lifetime from modulation ``.tmd.bin``).
     Phase values are in degrees, modulation in percent.
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with FlimageBin('flimage.int.bin') as f:
+        >>> with FlimageBin(DATA / 'flimage.int.bin') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_flimage.int.bin.tif')
+        ...     f.totiff(TEMP / '_flimage.int.bin.tif')
         ...     print(f.shape, data[:, 219, 299])
         ...
         (3, 220, 300) [1.23 111.8 36.93]
-        >>> with TiffFile('_flimage.int.bin.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.(int|mod|phi|tmd|tph)\.bin$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 7)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 264000."""
         if self._filesize != 264000:
@@ -3753,13 +3903,16 @@ class FlimageBin(LfdFile):
         self.dtype = numpy.dtype('>f4')
         self.axes = 'YX'
 
-    def _components(self) -> list[tuple[str, str]]:
+    @classmethod
+    @override
+    def _components(cls, filename: str, /) -> list[tuple[str, str]]:
         """Return possible names of component files."""
         return [
-            (c, self._filename[:-7] + c + '.bin')
+            (c, filename[:-7] + c + '.bin')
             for c in ('int', 'phi', 'mod', 'tph', 'tmd')
         ]
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return images as float32 array of shape (220, 300)."""
         assert self._fh is not None
@@ -3767,6 +3920,7 @@ class FlimageBin(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
@@ -3792,6 +3946,7 @@ class FlimageBin(LfdFile):
                 ax.set_axis_off()
             ax.imshow(img, **kwargs)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False, metadata=None)
@@ -3812,21 +3967,19 @@ class FlieOut(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with FlieOut('off_flie.out') as f:
+        >>> with FlieOut(DATA / 'off_flie.out') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_off_flie.out.tif')
+        ...     f.totiff(TEMP / '_off_flie.out.tif')
         ...     print(f.shape, data[:, 219, 299])
         ...
         (3, 220, 300) [91.85 28.24 69.03]
-        >>> with TiffFile('_off_flie.out.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'(off|phi|mod)_.*\.out$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 7)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 264000."""
         if self._filesize != 264000:
@@ -3835,10 +3988,13 @@ class FlieOut(LfdFile):
         self.dtype = numpy.dtype('>f4')
         self.axes = 'YX'
 
-    def _components(self) -> list[tuple[str, str]]:
+    @classmethod
+    @override
+    def _components(cls, filename: str, /) -> list[tuple[str, str]]:
         """Return possible names of component files."""
-        return [(c, c + self._filename[3:]) for c in ('Off', 'Phi', 'Mod')]
+        return [(c, c + filename[3:]) for c in ('Off', 'Phi', 'Mod')]
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float32]:
         """Return image data as float32 array of shape (220, 300)."""
         assert self._fh is not None
@@ -3846,11 +4002,13 @@ class FlieOut(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(kwargs, contiguous=False, metadata=None)
         tif.write(self.asarray(), **kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in files."""
         assert pyplot is not None
@@ -3888,20 +4046,18 @@ class FliezI16(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with FliezI16('fliez.i16') as f:
+        >>> with FliezI16(DATA / 'fliez.i16') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_fliez.i16.tif')
+        ...     f.totiff(TEMP / '_fliez.i16.tif')
         ...     print(f.shape, data[::8, 108, 104])
         ...
         (32, 256, 256) [401 538 220 297]
-        >>> with TiffFile('_fliez.i16.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.i16$'
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file size is 128 KB."""
         if self._filesize % 131072:
@@ -3910,6 +4066,7 @@ class FliezI16(LfdFile):
         self.dtype = numpy.dtype('<u2')
         self.axes = 'IYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint16]:
         """Return images as uint16 array of shape (-1, 256, 256)."""
         assert self._fh is not None
@@ -3917,6 +4074,7 @@ class FliezI16(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -3928,27 +4086,26 @@ class FliezDb2(LfdFile):
     FLIez DB2 files contain a sequence of images from fluorescence lifetime
     measurements. The modality of the data stored in different files varies:
     phase intensities, average intensities, phase or modulation.
-    After a header specifying the 3D data shape, images are stored
-    consecutively as float64. No other metadata are available.
+    A 12-byte header of three int32 values specifies the data shape (x, y, z).
+    The float64 image data follows immediately at byte 12. No other metadata
+    are available.
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with FliezDb2('fliez.db2') as f:
+        >>> with FliezDb2(DATA / 'fliez.db2') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_fliez.db2.tif')
+        ...     f.totiff(TEMP / '_fliez.db2.tif')
         ...     print(f.shape, data[8, 108, 104])
         ...
         (32, 256, 256) 234.0
-        >>> with TiffFile('_fliez.db2.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.db2$'
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read data shape and verify file size."""
         assert self._fh is not None
@@ -3959,6 +4116,7 @@ class FliezDb2(LfdFile):
         self.dtype = numpy.dtype('<f8')
         self.axes = 'IYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.float64]:
         """Return images as 3D array of float64."""
         assert self._fh is not None
@@ -3966,6 +4124,7 @@ class FliezDb2(LfdFile):
         assert self.shape is not None
         return numpy.fromfile(self._fh, self.dtype).reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -3990,15 +4149,12 @@ class BioradPic(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with BioradPic('biorad.pic') as f:
+        >>> with BioradPic(DATA / 'biorad.pic') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_biorad.pic.tif')
+        ...     f.totiff(TEMP / '_biorad.pic.tif')
         ...     print(f.shape, data[78, 255, 255])
         ...
         (79, 256, 256) 8
-        >>> with TiffFile('_biorad.pic.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -4018,6 +4174,7 @@ class BioradPic(LfdFile):
     spacing: tuple[float, ...]
     """Spacing of pixels or voxels in micrometer."""
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read header and validate file Id."""
         assert self._fh is not None
@@ -4111,6 +4268,7 @@ class BioradPic(LfdFile):
                     origin.append(float(ori))
         return notes, tuple(spacing), tuple(origin)
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint8 | numpy.uint16]:
         """Return image data as array."""
         assert self._fh is not None
@@ -4120,6 +4278,7 @@ class BioradPic(LfdFile):
         data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
         return data.reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         data = self._asarray()
@@ -4127,6 +4286,7 @@ class BioradPic(LfdFile):
             data, figure=figure, title=self._filename, photometric='MINISBLACK'
         )
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         update_kwargs(
@@ -4139,6 +4299,7 @@ class BioradPic(LfdFile):
         )
         tif.write(self.asarray(), **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return properties as string."""
         return f'spacing: {self.spacing}\norigin: {self.origin}\n' + indent(
@@ -4186,9 +4347,9 @@ def bioradpic_write(
 
     Examples:
         >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('u1')
-        >>> bioradpic_write('_test.pic', data)
-        >>> with BioradPic('_test.pic') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> bioradpic_write(TEMP / '_test.pic', data)
+        >>> with BioradPic(TEMP / '_test.pic') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -4288,15 +4449,12 @@ class Ccp4Map(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with Ccp4Map('ccp4.map') as f:
+        >>> with Ccp4Map(DATA / 'ccp4.map') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_ccp4.map.tif', compression='zlib')
+        ...     f.totiff(TEMP / '_ccp4.map.tif', compression='zlib')
         ...     print(f.shape, data[100, 100, 100])
         ...
         (256, 256, 256) 1.0
-        >>> with TiffFile('_ccp4.map.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -4349,10 +4507,11 @@ class Ccp4Map(LfdFile):
         0: 'i1',
         1: 'i2',
         2: 'f4',
-        4: 'q8',
+        4: 'c8',
         5: 'i1',
     }
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read CCP4 file header and symboltable."""
         assert self._fh is not None
@@ -4464,13 +4623,20 @@ class Ccp4Map(LfdFile):
         ]
         self.axes = 'ZYX'
 
-    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+    @override
+    def asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
         """Return volume data as NumPy array.
 
         Parameters:
             memmap: If True, use `numpy.memmap` to read array.
 
         """
+        self._seek()
+        return self._asarray(memmap=memmap, **kwargs)
+
+    @override
+    def _asarray(self, *, memmap: bool = False, **kwargs: Any) -> NDArray[Any]:
+        """Return volume data as NumPy array."""
         assert self._fh is not None
         assert self.shape is not None
         assert self.dtype is not None
@@ -4485,10 +4651,12 @@ class Ccp4Map(LfdFile):
         data = numpy.fromfile(self._fh, self.dtype, product(self.shape))
         return data.reshape(self.shape)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return additional information about file."""
         return f'cell length: {self.cell_length}'
@@ -4526,9 +4694,9 @@ def ccp4map_write(
 
     Examples:
         >>> data = numpy.arange(1000000).reshape((100, 100, 100)).astype('f4')
-        >>> ccp4map_write('_test.ccp4', data)
-        >>> with Ccp4Map('_test.ccp4') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> ccp4map_write(TEMP / '_test.ccp4', data)
+        >>> with Ccp4Map(TEMP / '_test.ccp4') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -4537,7 +4705,7 @@ def ccp4map_write(
         msg = f'{data.ndim=} != 3'
         raise ValueError(msg)
     try:
-        mode = {'i1': 0, 'i2': 1, 'f4': 2, 'q8': 4}[data.dtype.str[-2:]]
+        mode = {'i1': 0, 'i2': 1, 'f4': 2, 'c8': 4}[data.dtype.str[-2:]]
     except KeyError as exc:
         msg = 'dtype not supported by MAP format'
         raise ValueError(msg) from exc
@@ -4636,15 +4804,12 @@ class Vaa3dRaw(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with Vaa3dRaw('vaa3d.v3draw') as f:
+        >>> with Vaa3dRaw(DATA / 'vaa3d.v3draw') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_vaa3d.v3draw.tif')
+        ...     f.totiff(TEMP / '_vaa3d.v3draw.tif')
         ...     print(f.shape, data[2, 100, 100, 100])
         ...
         (3, 181, 217, 181) 138
-        >>> with TiffFile('_vaa3d.v3draw.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -4652,6 +4817,7 @@ class Vaa3dRaw(LfdFile):
     _filesizemin = 24 + 1 + 2 + 4 * 2  # 2 byte format
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 8)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Read header and validate file size."""
         assert self._fh is not None
@@ -4678,6 +4844,7 @@ class Vaa3dRaw(LfdFile):
                 raise LfdFileError(self, msg)
         self.axes = 'CZYX'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data as array."""
         assert self._fh is not None
@@ -4686,6 +4853,7 @@ class Vaa3dRaw(LfdFile):
         data = numpy.fromfile(self._fh, self.dtype)
         return data.reshape(self.shape)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         data = self._asarray()
@@ -4693,6 +4861,7 @@ class Vaa3dRaw(LfdFile):
             data, figure=figure, title=self._filename, photometric='MINISBLACK'
         )
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         tif.write(self.asarray(), **kwargs)
@@ -4728,9 +4897,9 @@ def vaa3draw_write(
         ...     .reshape((10, 10, 100, 100))
         ...     .astype('uint16')
         ... )
-        >>> vaa3draw_write('_test.v3draw', data, byteorder='<')
-        >>> with Vaa3dRaw('_test.v3draw') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> vaa3draw_write(TEMP / '_test.v3draw', data, byteorder='<')
+        >>> with Vaa3dRaw(TEMP / '_test.v3draw') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -4744,7 +4913,7 @@ def vaa3draw_write(
     if byteorder is None:
         byteorder = '<' if sys.byteorder == 'little' else '>'
     elif byteorder not in {'>', '<'}:
-        msg = f'invalid byteorder {byteorder}'
+        msg = f'invalid {byteorder=!r}'
         raise ValueError(msg)
     assert byteorder is not None  # for mypy
     itemsize = {'B': 1, 'H': 2, 'f': 4}[data.dtype.char]
@@ -4771,22 +4940,19 @@ def vaa3draw_write(
 class VoxxMap(LfdFile):
     """Voxx color palette.
 
-    Voxx map files contain a single RGB color palette, stored as 256x4
+    Voxx map files contain a single RGBA color palette, stored as 256x4
     whitespace separated integers (0..255) in an ASCII file.
 
     Parameters:
         filename: Name of file to open.
 
     Examples:
-        >>> with VoxxMap('voxx.map') as f:
+        >>> with VoxxMap(DATA / 'voxx.map') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_voxx.map.tif')
+        ...     f.totiff(TEMP / '_voxx.map.tif')
         ...     print(f.shape, data[100])
         ...
-        (256, 3) [255 227 155 237]
-        >>> with TiffFile('_voxx.map.tif') as f:
-        ...     assert_array_equal(f.asarray()[0], data)
-        ...
+        (256, 4) [255 227 155 237]
 
     """
 
@@ -4795,6 +4961,7 @@ class VoxxMap(LfdFile):
     _filepattern = r'.*\.map$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 1)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Verify file starts with numbers."""
         assert self._fh is not None
@@ -4806,12 +4973,13 @@ class VoxxMap(LfdFile):
                 raise ValueError(msg)  # noqa: TRY301
         except Exception as exc:
             raise LfdFileError(self) from exc
-        self.shape = 256, 3
+        self.shape = 256, 4
         self.dtype = numpy.dtype(numpy.uint8)
         self.axes = 'XS'
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[numpy.uint8]:
-        """Return palette data as uint8 array of shape (256, 3)."""
+        """Return palette data as uint8 array of shape (256, 4)."""
         assert self._fh is not None
         assert self.shape is not None
         assert self.dtype is not None
@@ -4819,6 +4987,7 @@ class VoxxMap(LfdFile):
         data = numpy.fromfile(self._fh, numpy.uint8, 1024, sep=' ')
         return data.reshape((256, 4))
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display palette stored in file."""
         pal = self.asarray().reshape((1, 256, -1))
@@ -4827,6 +4996,7 @@ class VoxxMap(LfdFile):
         ax.yaxis.set_visible(False)
         ax.imshow(pal, aspect=20, origin='lower', interpolation='nearest')
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write palette to TIFF file."""
         kwargs.update(photometric='rgb', planarconfig='contig')
@@ -4853,9 +5023,9 @@ def voxxmap_write(
         >>> data = numpy.repeat(numpy.arange(256, dtype='uint8'), 4).reshape(
         ...     (-1, 4)
         ... )
-        >>> voxxmap_write('_test_vox.map', data)
-        >>> with VoxxMap('_test_vox.map') as f:
-        ...     assert_array_equal(f.asarray(), data)
+        >>> voxxmap_write(TEMP / '_test_vox.map', data)
+        >>> with VoxxMap(TEMP / '_test_vox.map') as f:
+        ...     assert numpy.array_equal(f.asarray(), data)
         ...
 
     """
@@ -4880,15 +5050,12 @@ class NetpbmFile(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with NetpbmFile('netpbm.pam') as f:
+        >>> with NetpbmFile(DATA / 'netpbm.pam') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_netpbm.pam.tif')
+        ...     f.totiff(TEMP / '_netpbm.pam.tif')
         ...     print(f.shape, data[75, 75, 1])
         ...
         (150, 150, 4) 255
-        >>> with TiffFile('_netpbm.pam.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -4897,6 +5064,7 @@ class NetpbmFile(LfdFile):
 
     # _netpbm: netpbmfile.NetpbmFile
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Validate file is a Netpbm file."""
         assert self._fh is not None
@@ -4925,14 +5093,17 @@ class NetpbmFile(LfdFile):
         self.dtype = self._netpbm.dtype
         self.axes = self._netpbm.axes
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data from Netpbm file."""
         return self._netpbm.asarray(**kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         kwargs.update(metadata=None)
@@ -4941,6 +5112,7 @@ class NetpbmFile(LfdFile):
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return info about Netpbm file as string."""
         # return str(self._netpbm)
@@ -4963,7 +5135,7 @@ class OifFile(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with OifFile('oiffile.oib') as f:
+        >>> with OifFile(DATA / 'oiffile.oib') as f:
         ...     print(f.asarray()[2, 100, 100])
         ...
         248
@@ -4973,6 +5145,7 @@ class OifFile(LfdFile):
     _filepattern = r'.*\.(oib|oif)$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 7)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Open OIF or OIB file."""
         assert self._fh is not None
@@ -4995,21 +5168,25 @@ class OifFile(LfdFile):
         self.shape = self._oif.shape
         self.dtype = self._oif.dtype
 
+    @override
     def _close(self) -> None:
         """Close OifFile instance."""
         if self._oif is not None:
             self._oif.close()
             self._oif = None
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data from OIF file."""
         assert self._oif is not None
         return self._oif.asarray(**kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         data = self.asarray()
@@ -5017,6 +5194,7 @@ class OifFile(LfdFile):
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return info about OIF as string."""
         # return str(self._oif).split('\n', 2)[-1]
@@ -5039,21 +5217,19 @@ class CziFile(LfdFile):
         filename: Name of file to open.
 
     Examples:
-        >>> with CziFile('czifile.czi') as f:
+        >>> with CziFile(DATA / 'czifile.czi') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_czifile.czi.tif')
+        ...     f.totiff(TEMP / '_czifile.czi.tif')
         ...     print(f.shape, data[2, 2, 2, 80, 32, 2])
         ...
         (3, 3, 3, 250, 200, 3) 255
-        >>> with TiffFile('_czifile.czi.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
     _filepattern = r'.*\.(czi)$'
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
 
+    @override
     def _init(self, **kwargs: Any) -> None:
         """Validate file is a CZI file."""
         assert self._fh is not None
@@ -5069,25 +5245,30 @@ class CziFile(LfdFile):
         except Exception as exc:
             raise LfdFileError(self) from exc
 
-        self.axes = self._czi.axes
-        self.shape = self._czi.shape
-        self.dtype = self._czi.dtype
+        img = self._czi.scenes[0]
+        self.axes = img.axes
+        self.shape = img.shape
+        self.dtype = img.dtype
 
+    @override
     def _close(self) -> None:
-        """Close OifFile instance."""
+        """Close CziFile instance."""
         if self._czi is not None:
             self._czi.close()
             self._czi = None
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data from CZI file."""
         assert self._czi is not None
-        return self._czi.asarray(**kwargs)  # type: ignore[no-any-return]
+        return self._czi.scenes[0].asarray(**kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         data = self.asarray()
@@ -5095,6 +5276,7 @@ class CziFile(LfdFile):
             kwargs.update(planarconfig='contig')
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return CZI info as string."""
         # return str(self._czi).split('\n', 2)[-1]
@@ -5118,15 +5300,12 @@ class TiffFile(LfdFile):
         series: Select image series in TIFF file to read.
 
     Examples:
-        >>> with TiffFile('tifffile.tif') as f:
+        >>> with TiffFile(DATA / 'tifffile.tif') as f:
         ...     data = f.asarray()
-        ...     f.totiff('_tifffile.tif.tif')
+        ...     f.totiff(TEMP / '_tifffile.tif.tif')
         ...     print(f.shape, data[31, 30, 2])
         ...
         (32, 31, 3) 80
-        >>> with TiffFile('_tifffile.tif.tif') as f:
-        ...     assert_array_equal(f.asarray(), data)
-        ...
 
     """
 
@@ -5136,6 +5315,7 @@ class TiffFile(LfdFile):
     _tif: tifffile.TiffFile | None
     _series: tifffile.TiffPageSeries
 
+    @override
     def _init(self, *, series: int = 0, **kwargs: Any) -> None:
         """Validate file is a TIFF file."""
         assert self._fh is not None
@@ -5158,17 +5338,20 @@ class TiffFile(LfdFile):
         self.shape = self._series.shape
         self.dtype = self._series.dtype
 
+    @override
     def _close(self) -> None:
-        """Close OifFile instance."""
+        """Close TiffFile instance."""
         if self._tif is not None:
             self._tif.close()
             self._tif = None
 
+    @override
     def _asarray(self, **kwargs: Any) -> NDArray[Any]:
         """Return data from TIFF file."""
         assert self._tif is not None
         return self._tif.asarray(**kwargs)
 
+    @override
     def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
         """Display images stored in file."""
         page = self._series.keyframe
@@ -5180,6 +5363,7 @@ class TiffFile(LfdFile):
             bitspersample=page.bitspersample,
         )
 
+    @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
         """Write image data to TIFF file."""
         data = self.asarray()
@@ -5187,6 +5371,7 @@ class TiffFile(LfdFile):
             kwargs.update(photometric='rgb', planarconfig='contig')
         tif.write(data, **kwargs)
 
+    @override
     def _str(self) -> str | None:
         """Return TIFF info as string."""
         # return str(self._tif)
@@ -5216,8 +5401,7 @@ def convert2tiff(
             The default is SimfcsBin, SimfcsRaw, SimfcsCyl, FliezI16.
 
     Examples:
-        >>> convert2tiff('flimfast.flif')
-        flimfast.flif - FlimfastFlif
+        >>> convert2tiff(DATA / 'flimfast.flif', verbose=False)
 
     """
     if skip is None:
@@ -5225,7 +5409,7 @@ def convert2tiff(
 
     registry = [
         cls
-        for cls in LfdFileRegistry.classes
+        for cls in LfdFile._registry
         if cls not in skip and cls._totiff != LfdFile._totiff
     ]
     for file in LfdFileSequence(files, imread=LfdFile):
@@ -5319,10 +5503,10 @@ def determine_shape(
     dtype = numpy.dtype(dtype)
     undetermined = len([i for i in shape if i < 0])
     if undetermined > 1:
-        msg = 'invalid shape'
+        msg = f'invalid {shape=}'
         raise ValueError(msg)
     if size < 0:
-        msg = 'invalid size'
+        msg = f'invalid {size=}'
         raise ValueError(msg)
     if undetermined:
         count = int(size // dtype.itemsize)
@@ -5478,7 +5662,27 @@ def main() -> None:
     cli(prog_name='lfdfiles')
 
 
-LfdFileRegistry.sort()
+# sort registry by probe priority (generic formats last)
+LfdFile._registry.sort(key=lambda cls: cls._probe_priority)
+
+FILE_EXTENSIONS = {
+    '.bhz': SimfcsBhz,
+    '.ref': SimfcsRef,
+    '.r64': SimfcsR64,
+    '.b64': SimfcsB64,
+    '.b&h': SimfcsBh,
+    '.i64': SimfcsI64,
+    '.z64': SimfcsZ64,
+    '.cyl': SimfcsCyl,
+    '.ifli': VistaIfli,
+    '.vpl': SimfcsVpl,
+    '.vpp': SimfcsVpp,
+    '.ifi': VistaIfi,
+    '.ccp4': Ccp4Map,
+    '.flif': FlimfastFlif,
+    '.v3draw': Vaa3dRaw,
+    '.fbd': FlimboxFbd,
+}
 
 if __name__ == '__main__':
     main()
