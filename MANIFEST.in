@@ -5,11 +5,6 @@ include pyproject.toml
 
 include lfdfiles/py.typed
 
-include tests/test_lfdfiles.py
-include docs/conf.py
-include docs/index.rst
-include docs/_static/custom.css
-
 exclude .env
 exclude *.cmd
 exclude *.yaml
@@ -25,3 +20,6 @@ recursive-exclude * *.py[co]
 recursive-exclude * *Copy*
 recursive-exclude * *-
 recursive-exclude * *.html
+
+include tests/test_lfdfiles.py
+include tests/conftest.py
