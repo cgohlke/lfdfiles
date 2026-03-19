@@ -1,5 +1,14 @@
 Revisions
----------
+=========
+
+2026.3.18
+
+- Replace LfdFileRegistry metaclass with __init_subclass__.
+- Add LfdFile.open classmethod as typed factory for auto-detection.
+- Add LfdFile._probe classmethod for cheap file pre-screening.
+- Add asarray overrides with typed signatures to select subclasses.
+- Convert _components to classmethod.
+- Drop support for Python 3.11.
 
 2026.1.14
 
