@@ -102,16 +102,9 @@ setup(
     package_data={'lfdfiles': ['py.typed']},
     entry_points={'console_scripts': ['lfdfiles = lfdfiles.lfdfiles:main']},
     python_requires='>=3.12',
-    install_requires=['numpy>=2.0', 'tifffile', 'click'],
+    install_requires=['numpy>=2.1', 'tifffile', 'click'],
     extras_require={
-        'all': [
-            'imagecodecs',
-            'matplotlib',
-            'fbdfile',
-            'czifile',
-            'oiffile',
-            'netpbmfile',
-        ],
+        'all': ['imagecodecs', 'matplotlib'],
     },
     platforms=['any'],
     classifiers=[
