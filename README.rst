@@ -11,7 +11,6 @@ to store experimental data and metadata at the
 Supported formats include:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
-- FLIMbox FBD, FBF, FBS.XML
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
@@ -21,7 +20,7 @@ Supported formats include:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.3.18
+:Version: 2026.4.30
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -49,20 +48,23 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.12, 3.14.3 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.3
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.3.3
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.2.6 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2026.3.17 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.2.8 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.29 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.13, 3.14.4 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.4.11
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.9
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.3.3
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.4.30
+
+- Remove FlimboxFbd, FlimboxFbf, and FlimboxFbs (breaking; use fbdfile).
+- Remove CziFile, NetpbmFile, OifFile, and TiffFile wrappers (breaking).
+- Add typed __init__ overrides to subclasses with class-specific parameters.
+- Drop support for numpy 2.0 (SPEC0).
 
 2026.3.18
 
@@ -120,17 +122,18 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.11 is no longer supported. 32-bit versions are deprecated.
-
 Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
 No guarantee can be made as to the correctness of code and documentation.
 
 Experimental data are often stored in plain binary files with metadata
-available in separate, human readable journal files (`.jrn`).
+available in separate, human readable journal files (``.jrn``).
 
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
+
+The FLIMbox functionality has been moved to the
+`fbdfile <https://pypi.org/project/fbdfile/>`_ package.
 
 The Laboratory for Fluorescence Dynamics (LFD) was a national research
 resource center for biomedical fluorescence spectroscopy funded by the
