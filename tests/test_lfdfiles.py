@@ -29,7 +29,7 @@
 
 """Unittests for the lfdfiles package.
 
-:Version: 2026.3.18
+:Version: 2026.4.30
 
 """
 
@@ -44,27 +44,22 @@ from numpy.testing import (
     assert_array_almost_equal,
     assert_array_equal,
 )
+from tifffile import TiffFile
 
 import lfdfiles
 from lfdfiles import (
     FILE_EXTENSIONS,
     BioradPic,
     Ccp4Map,
-    CziFile,
     FlieOut,
     FliezDb2,
     FliezI16,
     FlimageBin,
-    FlimboxFbd,
-    FlimboxFbf,
-    FlimboxFbs,
     FlimfastFlif,
     GlobalsAscii,
     GlobalsLif,
     LfdFile,
     LfdFileSequence,
-    NetpbmFile,
-    OifFile,
     RawPal,
     SimfcsB64,
     SimfcsBh,
@@ -82,7 +77,6 @@ from lfdfiles import (
     SimfcsVpl,
     SimfcsVpp,
     SimfcsZ64,
-    TiffFile,
     Vaa3dRaw,
     VistaIfi,
     VistaIfli,
@@ -528,33 +522,6 @@ def test_simfcsgpseries():
     assert data.shape == (2, 135, 256, 256)
 
 
-def test_flimboxfbd():
-    """Test FlimboxFbd."""
-    with FlimboxFbd(DATA / 'flimbox_data$CBCO.fbd') as f:
-        assert f.laser_frequency == 20000000.0
-        bins, times, markers = f.decode(word_count=500000, skip_words=1900000)
-    assert_array_equal(bins[0, :2], [53, 51])
-    assert_array_equal(times[:2], [0, 42])
-    assert_array_equal(markers, [44097, 124815])
-    hist = [numpy.bincount(b[b >= 0]) for b in bins]
-    assert int(numpy.argmax(hist[0])) == 53
-
-
-def test_flimboxfbs():
-    """Test FlimboxFbs."""
-    with FlimboxFbs(DATA / 'flimbox_settings.fbs.xml') as f:
-        assert f['ScanParams']['ExcitationFrequency'] == 20000000
-
-
-def test_flimboxfbf():
-    """Test FlimboxFbf."""
-    with FlimboxFbf(DATA / 'flimbox_firmware.fbf') as f:
-        assert f['windows'] == 16
-        assert f['channels'] == 2
-        assert f['secondharmonic'] == 0
-        assert 'extclk' in f
-
-
 def test_globalslif():
     """Test GlobalsLif."""
     with GlobalsLif(DATA / 'globals.lif') as f:
@@ -748,49 +715,6 @@ def test_voxxmap_write():
     data = numpy.repeat(numpy.arange(256, dtype='uint8'), 4).reshape((-1, 4))
     voxxmap_write(TEMP / '_test_vox.map', data)
     with VoxxMap(TEMP / '_test_vox.map') as f:
-        assert_array_equal(f.asarray(), data)
-
-
-def test_netpbmfile():
-    """Test NetpbmFile."""
-    with NetpbmFile(DATA / 'netpbm.pam') as f:
-        data = f.asarray()
-        f.totiff(TEMP / '_netpbm.pam.tif')
-        assert f.shape == (150, 150, 4)
-        assert data[75, 75, 1] == 255
-    with TiffFile(TEMP / '_netpbm.pam.tif') as f:
-        assert_array_equal(f.asarray(), data)
-
-
-def test_oiffile():
-    """Test OifFile."""
-    with OifFile(DATA / 'oiffile.oib') as f:
-        data = f.asarray()
-        f.totiff(TEMP / '_oiffile.oib.tif')
-        assert data[2, 100, 100] == 248
-    with TiffFile(TEMP / '_oiffile.oib.tif') as f:
-        assert_array_equal(f.asarray(), data)
-
-
-def test_czifile():
-    """Test CziFile."""
-    with CziFile(DATA / 'czifile.czi') as f:
-        data = f.asarray()
-        f.totiff(TEMP / '_czifile.czi.tif')
-        assert f.shape == (3, 3, 3, 250, 200, 3)
-        assert data[2, 2, 2, 80, 32, 2] == 255
-    with TiffFile(TEMP / '_czifile.czi.tif') as f:
-        assert_array_equal(f.asarray(), data)
-
-
-def test_tifffile():
-    """Test TiffFile."""
-    with TiffFile(DATA / 'tifffile.tif') as f:
-        data = f.asarray()
-        f.totiff(TEMP / '_tifffile.tif.tif')
-        assert f.shape == (32, 31, 3)
-        assert data[31, 30, 2] == 80
-    with TiffFile(TEMP / '_tifffile.tif.tif') as f:
         assert_array_equal(f.asarray(), data)
 
 
