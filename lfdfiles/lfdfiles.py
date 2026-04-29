@@ -38,7 +38,6 @@ to store experimental data and metadata at the
 Supported formats include:
 
 - SimFCS VPL, VPP, JRN, BIN, INT, CYL, REF, BH, BHZ, B64, I64, Z64, R64
-- FLIMbox FBD, FBF, FBS.XML
 - GLOBALS LIF, ASCII
 - CCP4 MAP
 - Vaa3D RAW
@@ -48,7 +47,7 @@ Supported formats include:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.3.18
+:Version: 2026.4.30
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -76,20 +75,23 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.12, 3.14.3 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.3
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.3.3
-- `Fbdfile <https://pypi.org/project/fbdfile>`_ 2026.2.6 (optional)
-- `Czifile <https://pypi.org/project/czifile/>`_ 2026.3.17 (optional)
-- `Oiffile <https://pypi.org/project/oiffile/>`_ 2026.2.8 (optional)
-- `Netpbmfile <https://pypi.org/project/netpbmfile/>`_ 2026.1.29 (optional)
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.8
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.13, 3.14.4 64-bit
+- `NumPy <https://pypi.org/project/numpy>`_ 2.4.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.4.11
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.9
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.3.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.3.3
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.4.30
+
+- Remove FlimboxFbd, FlimboxFbf, and FlimboxFbs (breaking; use fbdfile).
+- Remove CziFile, NetpbmFile, OifFile, and TiffFile wrappers (breaking).
+- Add typed __init__ overrides to subclasses with class-specific parameters.
+- Drop support for numpy 2.0 (SPEC0).
 
 2026.3.18
 
@@ -147,17 +149,18 @@ Notes
 
 The API is not stable yet and might change between revisions.
 
-Python <= 3.11 is no longer supported. 32-bit versions are deprecated.
-
 Many of the LFD file formats are not documented and might change arbitrarily.
 This implementation is mostly based on reverse engineering existing files.
 No guarantee can be made as to the correctness of code and documentation.
 
 Experimental data are often stored in plain binary files with metadata
-available in separate, human readable journal files (`.jrn`).
+available in separate, human readable journal files (``.jrn``).
 
 Unless specified otherwise, data are stored in little-endian, C contiguous
 order.
+
+The FLIMbox functionality has been moved to the
+`fbdfile <https://pypi.org/project/fbdfile/>`_ package.
 
 The Laboratory for Fluorescence Dynamics (LFD) was a national research
 resource center for biomedical fluorescence spectroscopy funded by the
@@ -230,28 +233,22 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2026.3.18'
+__version__ = '2026.4.30'
 
 __all__ = [
     'FILE_EXTENSIONS',
     'BioradPic',
     'Ccp4Map',
-    'CziFile',
     'FlieOut',
     'FliezDb2',
     'FliezI16',
     'FlimageBin',
-    'FlimboxFbd',
-    'FlimboxFbf',
-    'FlimboxFbs',
     'FlimfastFlif',
     'GlobalsAscii',
     'GlobalsLif',
     'LfdFile',
     'LfdFileError',
     'LfdFileSequence',
-    'NetpbmFile',
-    'OifFile',
     'RawPal',
     'SimfcsB64',
     'SimfcsBh',
@@ -270,7 +267,6 @@ __all__ = [
     'SimfcsVpl',
     'SimfcsVpp',
     'SimfcsZ64',
-    'TiffFile',
     'Vaa3dRaw',
     'VistaIfi',
     'VistaIfli',
@@ -288,7 +284,6 @@ __all__ = [
 ]
 
 import contextlib
-import copy
 import logging
 import math
 import os
@@ -301,7 +296,6 @@ import zlib
 from typing import IO, TYPE_CHECKING, override
 
 import numpy
-import tifffile
 from tifffile import (
     FileSequence,
     TiffWriter,
@@ -327,7 +321,7 @@ cycler: ModuleType | None = None
 
 
 def import_pyplot(*, fail: bool = True) -> bool:
-    """Import `matplotlib.pyplot`."""
+    """Import ``matplotlib.pyplot``."""
     global pyplot  # noqa: PLW0603
     global cycler  # noqa: PLW0603
 
@@ -435,7 +429,7 @@ class LfdFile:
 
     """
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 8.5)}
-    """Arguments passed to `pyplot.figure`.
+    """Arguments passed to ``pyplot.figure``.
 
     :meta public:
 
@@ -474,7 +468,7 @@ class LfdFile:
         filename: os.PathLike[Any] | str,
         /,
     ) -> bool:
-        """Return whether `filename` may be readable by this class.
+        """Return whether ``filename`` may be readable by this class.
 
         Perform cheap pre-screening based on filename pattern and file size.
         Subclasses with magic bytes may override this for more specific
@@ -503,7 +497,7 @@ class LfdFile:
         validate: bool = True,
         **kwargs: Any,
     ) -> LfdFile:
-        """Return LfdFile subclass instance that can read `filename`.
+        """Return LfdFile subclass instance that can read ``filename``.
 
         Iterate registered LfdFile subclasses and return an instance of
         the first class that can successfully open the file.
@@ -536,7 +530,7 @@ class LfdFile:
         if skip is None:
             skip = set()
             if not validate:
-                skip.update((SimfcsBh, SimfcsCyl, FlimboxFbd, FliezI16))
+                skip.update((SimfcsBh, SimfcsCyl, FliezI16))
         exceptions: list[str] = []
         for lfdfile in registry:
             if lfdfile in skip:
@@ -583,7 +577,7 @@ class LfdFile:
             skip = set()
             if not validate:
                 # skip formats that are too generic
-                skip.update((SimfcsBh, SimfcsCyl, FlimboxFbd, FliezI16))
+                skip.update((SimfcsBh, SimfcsCyl, FliezI16))
         exceptions = []
         for lfdfile in registry:
             if lfdfile in skip:
@@ -928,7 +922,7 @@ class LfdFile:
             self._fh.seek(self._pos)
 
     def _valid_name(self) -> None:
-        """Raise LfdFileError if filename does not match `_filepattern`.
+        """Raise LfdFileError if filename does not match ``_filepattern``.
 
         Re :py:attr:`LfdFile._filepattern`.
 
@@ -982,7 +976,7 @@ class LfdFileSequence(FileSequence):
         container:
             Name or open instance of ZIP file in which files are stored.
         sort:
-            Function to sort file names if `files` is a pattern.
+            Function to sort file names if ``files`` is a pattern.
             If False, disable sorting.
 
     Examples:
@@ -1461,6 +1455,18 @@ class SimfcsJrn(LfdFile):
     _records: list[dict[str, str]]
 
     @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        lower: bool = False,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(filename, lower=lower, _offset=_offset, **kwargs)
+
+    @override
     def _init(self, *, lower: bool = False, **kwargs: Any) -> None:
         """Read journal file and parse into list of dictionaries."""
         assert self._fh is not None
@@ -1562,7 +1568,7 @@ class SimfcsBin(LfdFile):
     shape, stored C-contiguously in little-endian byte order.
     The files do not store shape, data type, or metadata. External knowledge
     is required to interpret the payload correctly. A common format is
-    `shape=(256, 256), dtype='uint16'`.
+    ``shape=(256, 256), dtype='uint16'``.
 
     Parameters:
         filename:
@@ -1591,6 +1597,29 @@ class SimfcsBin(LfdFile):
 
     _filepattern = r'.*\.(bin|raw)$'
     _probe_priority = 100  # most generic format, try last
+
+    @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        shape: tuple[int, ...] | None = None,
+        dtype: DTypeLike | None = None,
+        offset: int = 0,
+        validate_size: bool = True,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            filename,
+            shape=shape,
+            dtype=dtype,
+            offset=offset,
+            validate_size=validate_size,
+            _offset=_offset,
+            **kwargs,
+        )
 
     @override
     def _init(
@@ -1942,6 +1971,18 @@ class SimfcsCyl(LfdFile):
     _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 3)}
 
     @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        shape: tuple[int, int, int] = (2, -1, 256),
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(filename, shape=shape, _offset=_offset, **kwargs)
+
+    @override
     def _init(
         self, *, shape: tuple[int, int, int] = (2, -1, 256), **kwargs: Any
     ) -> None:
@@ -2240,6 +2281,21 @@ class SimfcsB64(LfdFile):
     _filepattern = r'.*\.b64$'
 
     @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        dtype: DTypeLike | None = '<i2',
+        maxsize: int = 4096,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            filename, dtype=dtype, maxsize=maxsize, _offset=_offset, **kwargs
+        )
+
+    @override
     def _init(
         self,
         *,
@@ -2341,7 +2397,7 @@ class SimfcsI64(LfdFile):
     Zlib deflate compressed stream of one int32 (defining the image size in
     x and y dimensions) and the float32 image data.
     The measurement extension is usually encoded in the file name.
-    Some files with an `.i64` extension contain multiple images instead of a
+    Some files with an ``.i64`` extension contain multiple images instead of a
     single image.
 
     Parameters:
@@ -2363,6 +2419,21 @@ class SimfcsI64(LfdFile):
     """
 
     _filepattern = r'.*\.i64$'
+
+    @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        dtype: DTypeLike | None = '<f4',
+        maxsize: int = 1024,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            filename, dtype=dtype, maxsize=maxsize, _offset=_offset, **kwargs
+        )
 
     @override
     def _init(
@@ -2479,6 +2550,27 @@ class SimfcsZ64(LfdFile):
     _filesizemin = 32
 
     @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        dtype: DTypeLike | None = '<f4',
+        maxsize: tuple[int, int] = (256, 1024),
+        doubleheader: bool = False,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            filename,
+            dtype=dtype,
+            maxsize=maxsize,
+            doubleheader=doubleheader,
+            _offset=_offset,
+            **kwargs,
+        )
+
+    @override
     def _init(
         self,
         *,
@@ -2593,7 +2685,7 @@ class SimfcsR64(SimfcsRef):
     4. md2 - modulation of 2nd harmonic
 
     Phase values are in degrees, the modulation values are normalized.
-    Phase and modulation values may be `NaN`.
+    Phase and modulation values may be ``NaN``.
 
     Parameters:
         dtype:
@@ -2612,6 +2704,21 @@ class SimfcsR64(SimfcsRef):
     """
 
     _filepattern = r'.*\.r64$'
+
+    @override
+    def __init__(
+        self,
+        filename: os.PathLike[Any] | str,
+        /,
+        *,
+        dtype: DTypeLike | None = '<f4',
+        maxsize: int = 1024,
+        _offset: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            filename, dtype=dtype, maxsize=maxsize, _offset=_offset, **kwargs
+        )
 
     @override
     def _init(
@@ -2716,289 +2823,6 @@ class SimfcsGpSeries(LfdFileSequence):
 
     _readfunction = SimfcsInt
     _indexpattern = r'(?P<C>\d)(?P<I>\d+)\.int'
-
-
-class FlimboxFbd(LfdFile):
-    """FLIMbox data.
-
-    FDB files contain encoded data from the FLIMbox device, storing a
-    stream of 16-bit or 32-bit integers (data words) that can be decoded to
-    photon arrival windows, channels, and times.
-    FBD files are written by SimFCS and VistaVision.
-
-    FlimboxFbd is a light wrapper around the fbdfile.FbdFile class.
-
-    Examples:
-        >>> with FlimboxFbd(DATA / 'flimbox_data$CBCO.fbd') as f:
-        ...     f.laser_frequency
-        ...     bins, times, markers = f.decode(
-        ...         word_count=500000, skip_words=1900000
-        ...     )
-        ...
-        20000000.0
-
-    """
-
-    _filepattern = r'.*\.fbd$'
-    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (6, 5)}
-
-    @override
-    def _init(self, **kwargs: Any) -> None:
-        """Initialize instance from file name code or file header."""
-        from fbdfile import FbdFile
-
-        # warnings.warn(
-        #     '<lfdfiles.FlimboxFBD> is deprecated since 2025.9.17. '
-        #     'Use fbdfile.FbdFile instead.',
-        #     DeprecationWarning,
-        #     stacklevel=2,
-        # )
-
-        try:
-            self._fbd = FbdFile(
-                os.path.join(self._filepath, self._filename), **kwargs
-            )
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-
-        # self.shape = ...
-        # self.dtype = ...
-        # self.axes = ...
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Return cross correlation phase index of shape (channels, size)."""
-        return self._fbd.decode(**kwargs)[0]
-
-    @override
-    def _close(self) -> None:
-        """Close FBD file."""
-        self._fbd.close()
-
-    @override
-    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
-        """Plot lifetime histogram for all channels."""
-        assert pyplot is not None
-        assert self._fbd.pmax is not None
-        assert self._fbd.pdiv is not None
-        ax = figure.add_subplot(1, 1, 1)
-        ax.set_title(self._filename)
-        ax.set_xlabel('Bin')
-        ax.set_ylabel('Counts')
-        ax.set_xlim((0, self._fbd.pmax // self._fbd.pdiv - 1))
-        bins, _times, _markers = self._fbd.decode()
-        bins_channel: Any  # for mypy
-        for ch, bins_channel in enumerate(bins):
-            histogram = numpy.bincount(bins_channel[bins_channel >= 0])
-            ax.plot(histogram, label=f'Ch{ch}')
-        ax.legend()
-
-    @override
-    def _str(self) -> str | None:
-        """Return additional information about file."""
-        return str(self._fbd).split('\n', 1)[-1]
-
-    def __getattr__(self, name: str, /) -> Any:
-        """Return attributes from FdbFile instance."""
-        if name == '_fbd':
-            raise AttributeError(name)
-        try:
-            attr = getattr(self._fbd, name)
-        except Exception as exc:
-            msg = (
-                f'{self.__class__.__name__!r} object has no attribute {name!r}'
-            )
-            raise AttributeError(msg) from exc
-        return attr
-
-    def asimage(
-        self,
-        *args: Any,
-        **kwargs: Any,
-    ) -> NDArray[numpy.uint16]:
-        """Return image histograms from decoded data and detected frames."""
-        return self._fbd.asimage(*args, **kwargs)
-
-
-class FlimboxFbs(LfdFile):
-    """FLIMbox settings.
-
-    VistaVision FBS.XML files contain FLIMbox acquisition settings in XML
-    format.
-
-    The properties can be accessed via dictionary interface.
-
-    Parameters:
-        filename: Name of file to open.
-
-    Examples:
-        >>> with FlimboxFbs(DATA / 'flimbox_settings.fbs.xml') as f:
-        ...     f['ScanParams']['ExcitationFrequency']
-        ...
-        20000000
-
-    """
-
-    _filemode = 'r'
-    _fileencoding = 'utf-8'
-    _filepattern = r'.*\.(fbs.xml)$'
-    _noplot = True
-
-    _settings: dict[str, Any]
-
-    @override
-    def _init(self, **kwargs: Any) -> None:
-        """Read and parse XML."""
-        from fbdfile import fbs_read
-
-        # warnings.warn(
-        #     '<lfdfiles.FlimboxFbs> is deprecated since 2025.9.17. '
-        #     'Use fbdfile.fbs_read instead.',
-        #     DeprecationWarning,
-        #     stacklevel=2,
-        # )
-
-        assert self._fh is not None
-        self._settings = fbs_read(self._fh)
-        if not self._settings:
-            raise LfdFileError(self)
-
-    def asdict(self) -> dict[str, Any]:
-        """Return settings as dict."""
-        return copy.deepcopy(self._settings)
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Raise ValueError."""
-        msg = 'FlimboxFbs file does not contain array data'
-        raise ValueError(msg)
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        msg = 'FlimboxFbs file does not contain image data'
-        raise ValueError(msg)
-
-    @override
-    def _str(self) -> str | None:
-        """Return string with settings."""
-        return format_dict(self._settings)
-
-    def __getitem__(self, key: str, /) -> Any:
-        return self._settings[key]
-
-    def __contains__(self, key: str, /) -> bool:
-        return key in self._settings
-
-    def __len__(self) -> int:
-        return len(self._settings)
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self._settings)
-
-
-class FlimboxFbf(LfdFile):
-    """FLIMbox firmware.
-
-    FBF files contain FLIMbox device firmwares, stored in binary form
-    following a NULL terminated ASCII string containing properties and
-    description.
-
-    The properties (lower cased) can be accessed via dictionary interface.
-
-    Parameters:
-        filename:
-            Name of file to open.
-        maxheaderlength:
-            Maximum length of header.
-
-    Examples:
-        >>> with FlimboxFbf(DATA / 'flimbox_firmware.fbf') as f:
-        ...     f['windows']
-        ...     f['channels']
-        ...     f['secondharmonic']
-        ...     'extclk' in f
-        ...
-        16
-        2
-        0
-        True
-
-    """
-
-    _filepattern = r'.*\.(fbf)$'
-    _noplot = True
-
-    _settings: dict[str, Any]
-    _maxheaderlength: int
-
-    @override
-    def _init(self, *, maxheaderlength: int = 1024, **kwargs: Any) -> None:
-        """Read and parse NULL terminated header string."""
-        from fbdfile import fbf_read
-
-        # warnings.warn(
-        #     '<lfdfiles.FlimboxFbf> is deprecated since 2025.9.17. '
-        #     'Use fbdfile.fbf_read instead.',
-        #     DeprecationWarning,
-        #     stacklevel=2,
-        # )
-
-        assert self._fh is not None
-
-        try:
-            self._settings = fbf_read(
-                self._fh, maxheaderlength=maxheaderlength
-            )
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-        self._maxheaderlength = maxheaderlength
-
-    def firmware(self) -> bytes:
-        """Return firmware as binary string."""
-        from fbdfile import fbf_read
-
-        assert self._fh is not None
-        try:
-            firmware = fbf_read(
-                self._fh, maxheaderlength=self._maxheaderlength, firmware=True
-            )['firmware']
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-        return firmware  # type: ignore[no-any-return]
-
-    def asdict(self) -> dict[str, Any]:
-        """Return settings as dict."""
-        return copy.deepcopy(self._settings)
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Raise ValueError."""
-        msg = 'FlimboxFbf file does not contain array data'
-        raise ValueError(msg)
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        msg = 'FlimboxFbf file does not contain image data'
-        raise ValueError(msg)
-
-    @override
-    def _str(self) -> str | None:
-        """Return string with header settings."""
-        return format_dict(self._settings)
-
-    def __getitem__(self, key: str, /) -> Any:
-        return self._settings[key]
-
-    def __contains__(self, key: str, /) -> bool:
-        return key in self._settings
-
-    def __len__(self) -> int:
-        return len(self._settings)
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self._settings)
 
 
 class GlobalsLif(LfdFile):
@@ -3182,7 +3006,7 @@ class GlobalsAscii(LfdFile):
     Consecutive measurements are stored in separate files with increasing file
     extension numbers. The format is also used by ISS and FLOP97 software.
 
-    The metadata can be accessed via dictionary `getitem` interface.
+    The metadata can be accessed via dictionary ``getitem`` interface.
     Keys are lower case with spaces replaced by underscores.
 
     Parameters:
@@ -3389,8 +3213,7 @@ class VistaIfi(LfdFile):
         assert self.dtype is not None
         self._fh.seek(256)
         data = numpy.fromfile(self._fh, '<f4', product(self.shape))
-        data.shape = self.shape
-        return data
+        return data.reshape(self.shape)
 
     @override
     def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
@@ -3531,7 +3354,10 @@ class VistaIfli(LfdFile):
                 header['TimeTags'] = struct.unpack(
                     f'<{sizet}f', fh.read(sizet * 4)
                 )
-            if offsets['TimeSeriesExternalClockFrequencies'] > 0:
+            if (
+                version >= 8
+                and offsets['TimeSeriesExternalClockFrequencies'] > 0
+            ):
                 fh.seek(offsets['TimeSeriesExternalClockFrequencies'])
                 header['TimeSeriesExternalClockFrequencies'] = struct.unpack(
                     f'<{sizet}f', fh.read(sizet * 4)
@@ -3633,7 +3459,7 @@ class VistaIfli(LfdFile):
         imaginary (s) parts of the phasor.
 
         Parameters:
-            memmap: If True, use `numpy.memmap` to read array.
+            memmap: If True, use ``numpy.memmap`` to read array.
 
         """
         self._seek()
@@ -4142,7 +3968,7 @@ class BioradPic(LfdFile):
 
     No official file format specification is available.
     The header structure was obtained from
-    https://forums.ni.com/ni/attachments/ni/200/7567/1/file%20format.pdf
+    https://forums.ni.com/ni/attachments/ni/200/7567/1/file%20format.pdf.
     This implementation does not currently handle multi-file data.
 
     Parameters:
@@ -4441,9 +4267,9 @@ class Ccp4Map(LfdFile):
     CCP4 MAP files contain 3D volume data. It is used by the Electron
     Microscopy Data Bank to store electron density maps.
 
-    - <http://emdatabank.org/mapformat.html>
-    - <http://www.ccp4.ac.uk/html/maplib.html>
-    - <ftp://ftp.wwpdb.org/pub/emdb/doc/map_format/EMDB_mapFormat_v1.0.pdf>
+    - http://emdatabank.org/mapformat.html
+    - https://www.ccp4.ac.uk/html/maplib.html
+    - ftp://ftp.wwpdb.org/pub/emdb/doc/map_format/EMDB_mapFormat_v1.0.pdf
 
     Parameters:
         filename: Name of file to open.
@@ -4628,7 +4454,7 @@ class Ccp4Map(LfdFile):
         """Return volume data as NumPy array.
 
         Parameters:
-            memmap: If True, use `numpy.memmap` to read array.
+            memmap: If True, use ``numpy.memmap`` to read array.
 
         """
         self._seek()
@@ -5036,351 +4862,6 @@ def voxxmap_write(
     numpy.savetxt(filename, data, fmt='%.0f')
 
 
-class NetpbmFile(LfdFile):
-    """Netpbm formatted files.
-
-    Netpbm files contain image data in a variety of formats as specified
-    at http://netpbm.sourceforge.net/doc/.
-
-    The following Netpbm and Portable FloatMap formats are supported:
-    PBM (bi-level), PGM (grayscale), PPM (color), PAM (arbitrary),
-    XV thumbnail (RGB332), PF (float32 RGB), and Pf (float32 grayscale).
-
-    Parameters:
-        filename: Name of file to open.
-
-    Examples:
-        >>> with NetpbmFile(DATA / 'netpbm.pam') as f:
-        ...     data = f.asarray()
-        ...     f.totiff(TEMP / '_netpbm.pam.tif')
-        ...     print(f.shape, data[75, 75, 1])
-        ...
-        (150, 150, 4) 255
-
-    """
-
-    _filepattern = r'.*\.(pnm|pbm|pgm|ppm|pam|pfm|xv)$'
-    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
-
-    # _netpbm: netpbmfile.NetpbmFile
-
-    @override
-    def _init(self, **kwargs: Any) -> None:
-        """Validate file is a Netpbm file."""
-        assert self._fh is not None
-        if self._fh.read(2) not in {
-            b'P1',
-            b'P2',
-            b'P3',
-            b'P4',
-            b'P5',
-            b'P6',
-            b'P7',
-            b'PF',
-            b'Pf',
-        }:
-            raise LfdFileError(self)
-        self._fh.seek(0)
-
-        import netpbmfile
-
-        try:
-            self._netpbm = netpbmfile.NetpbmFile(self._fh, **kwargs)
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-
-        self.shape = self._netpbm.shape
-        self.dtype = self._netpbm.dtype
-        self.axes = self._netpbm.axes
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Return data from Netpbm file."""
-        return self._netpbm.asarray(**kwargs)
-
-    @override
-    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
-        """Display images stored in file."""
-        imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        kwargs.update(metadata=None)
-        data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in {3, 4}:
-            kwargs.update(photometric='rgb', planarconfig='contig')
-        tif.write(data, **kwargs)
-
-    @override
-    def _str(self) -> str | None:
-        """Return info about Netpbm file as string."""
-        # return str(self._netpbm)
-
-    def __getattr__(self, name: str, /) -> Any:
-        """Return attribute from underlying NetpbmFile object."""
-        return getattr(self._netpbm, name)
-
-
-class OifFile(LfdFile):
-    """Olympus(r) Image Format files (OIF and OIB).
-
-    Olympus Image Format is the native file format of the Olympus
-    FluoView(tm) software for confocal microscopy.
-
-    This class is a light wrapper of the `oiffile` module. Use the module
-    directly to access metadata in OIF and OIB files.
-
-    Parameters:
-        filename: Name of file to open.
-
-    Examples:
-        >>> with OifFile(DATA / 'oiffile.oib') as f:
-        ...     print(f.asarray()[2, 100, 100])
-        ...
-        248
-
-    """
-
-    _filepattern = r'.*\.(oib|oif)$'
-    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 7)}
-
-    @override
-    def _init(self, **kwargs: Any) -> None:
-        """Open OIF or OIB file."""
-        assert self._fh is not None
-        start = self._fh.read(8)
-        if (
-            start != b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
-            and start[:4] != b'\xff\xfe\x5b\x00'
-        ):
-            raise LfdFileError(self)
-
-        import oiffile
-
-        self._oif: oiffile.OifFile | None
-        try:
-            self._oif = oiffile.OifFile(self.filename, **kwargs)
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-
-        self.axes = self._oif.axes
-        self.shape = self._oif.shape
-        self.dtype = self._oif.dtype
-
-    @override
-    def _close(self) -> None:
-        """Close OifFile instance."""
-        if self._oif is not None:
-            self._oif.close()
-            self._oif = None
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Return data from OIF file."""
-        assert self._oif is not None
-        return self._oif.asarray(**kwargs)
-
-    @override
-    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
-        """Display images stored in file."""
-        imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in {3, 4}:
-            kwargs.update(photometric='rgb', planarconfig='contig')
-        tif.write(data, **kwargs)
-
-    @override
-    def _str(self) -> str | None:
-        """Return info about OIF as string."""
-        # return str(self._oif).split('\n', 2)[-1]
-
-    def __getattr__(self, name: str, /) -> Any:
-        """Return attribute from underlying OifFile object."""
-        return getattr(self._oif, name)
-
-
-class CziFile(LfdFile):
-    """CZI file.
-
-    Carl Zeiss Image (CZI) is the native file format of the ZEN(r) software
-    by Carl Zeiss(r) Microscopy GmbH.
-
-    This class is a light wrapper of the `czifile` module. Use the module
-    directly to access additional image series and metadata in CZI files.
-
-    Parameters:
-        filename: Name of file to open.
-
-    Examples:
-        >>> with CziFile(DATA / 'czifile.czi') as f:
-        ...     data = f.asarray()
-        ...     f.totiff(TEMP / '_czifile.czi.tif')
-        ...     print(f.shape, data[2, 2, 2, 80, 32, 2])
-        ...
-        (3, 3, 3, 250, 200, 3) 255
-
-    """
-
-    _filepattern = r'.*\.(czi)$'
-    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
-
-    @override
-    def _init(self, **kwargs: Any) -> None:
-        """Validate file is a CZI file."""
-        assert self._fh is not None
-        if self._fh.read(10) != b'ZISRAWFILE':
-            raise LfdFileError(self)
-        self._fh.seek(0)
-
-        import czifile
-
-        self._czi: czifile.CziFile | None
-        try:
-            self._czi = czifile.CziFile(self._fh, **kwargs)
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-
-        img = self._czi.scenes[0]
-        self.axes = img.axes
-        self.shape = img.shape
-        self.dtype = img.dtype
-
-    @override
-    def _close(self) -> None:
-        """Close CziFile instance."""
-        if self._czi is not None:
-            self._czi.close()
-            self._czi = None
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Return data from CZI file."""
-        assert self._czi is not None
-        return self._czi.scenes[0].asarray(**kwargs)
-
-    @override
-    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
-        """Display images stored in file."""
-        imshow(self.asarray(**kwargs), figure=figure, title=self._filename)
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] <= 4:
-            kwargs.update(planarconfig='contig')
-        tif.write(data, **kwargs)
-
-    @override
-    def _str(self) -> str | None:
-        """Return CZI info as string."""
-        # return str(self._czi).split('\n', 2)[-1]
-
-    def __getattr__(self, name: str, /) -> Any:
-        """Return attribute from underlying CziFile object."""
-        return getattr(self._czi, name)
-
-
-class TiffFile(LfdFile):
-    """TIFF file.
-
-    TIFF, the Tagged Image File Format, is used to store image and meta data
-    from microscopy. Many custom extensions to the standard exist, such as
-    LSM, STK, FluoView, MicroManager, ImageJ and OME-TIFF.
-
-    This class is a light wrapper of the `tifffile` module. Use the module
-    directly to access additional image series and metadata in TIFF files.
-
-    Parameters:
-        series: Select image series in TIFF file to read.
-
-    Examples:
-        >>> with TiffFile(DATA / 'tifffile.tif') as f:
-        ...     data = f.asarray()
-        ...     f.totiff(TEMP / '_tifffile.tif.tif')
-        ...     print(f.shape, data[31, 30, 2])
-        ...
-        (32, 31, 3) 80
-
-    """
-
-    _filepattern = r'.*\.(tif|tiff|stk|lsm|tf8)$'
-    _figureargs: ClassVar[dict[str, Any]] = {'figsize': (8, 6)}
-
-    _tif: tifffile.TiffFile | None
-    _series: tifffile.TiffPageSeries
-
-    @override
-    def _init(self, *, series: int = 0, **kwargs: Any) -> None:
-        """Validate file is a TIFF file."""
-        assert self._fh is not None
-        if self._fh.read(4) not in {
-            b'MM\x00*',
-            b'II*\x00',
-            b'MM\x00+',
-            b'II+\x00',
-        }:
-            raise LfdFileError(self)
-        self._fh.seek(0)
-
-        try:
-            self._tif = tifffile.TiffFile(self._fh, **kwargs)
-        except Exception as exc:
-            raise LfdFileError(self) from exc
-
-        self._series = self._tif.series[series]
-        self.axes = self._series.axes
-        self.shape = self._series.shape
-        self.dtype = self._series.dtype
-
-    @override
-    def _close(self) -> None:
-        """Close TiffFile instance."""
-        if self._tif is not None:
-            self._tif.close()
-            self._tif = None
-
-    @override
-    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
-        """Return data from TIFF file."""
-        assert self._tif is not None
-        return self._tif.asarray(**kwargs)
-
-    @override
-    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
-        """Display images stored in file."""
-        page = self._series.keyframe
-        imshow(
-            self.asarray(**kwargs),
-            figure=figure,
-            title=self._filename,
-            photometric=page.photometric,
-            bitspersample=page.bitspersample,
-        )
-
-    @override
-    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
-        """Write image data to TIFF file."""
-        data = self.asarray()
-        if data.ndim > 2 and data.shape[-1] in {3, 4}:
-            kwargs.update(photometric='rgb', planarconfig='contig')
-        tif.write(data, **kwargs)
-
-    @override
-    def _str(self) -> str | None:
-        """Return TIFF info as string."""
-        # return str(self._tif)
-
-    def __getattr__(self, name: str, /) -> Any:
-        """Return attribute from underlying TiffFile object."""
-        return getattr(self._tif, name)
-
-
 def convert2tiff(
     files: str | os.PathLike[Any] | Sequence[str | os.PathLike[Any]],
     /,
@@ -5681,7 +5162,6 @@ FILE_EXTENSIONS = {
     '.ccp4': Ccp4Map,
     '.flif': FlimfastFlif,
     '.v3draw': Vaa3dRaw,
-    '.fbd': FlimboxFbd,
 }
 
 if __name__ == '__main__':
