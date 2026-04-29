@@ -1,6 +1,13 @@
 Revisions
 =========
 
+2026.4.30
+
+- Remove FlimboxFbd, FlimboxFbf, and FlimboxFbs (breaking; use fbdfile).
+- Remove CziFile, NetpbmFile, OifFile, and TiffFile wrappers (breaking).
+- Add typed __init__ overrides to subclasses with class-specific parameters.
+- Drop support for numpy 2.0 (SPEC0).
+
 2026.3.18
 
 - Replace LfdFileRegistry metaclass with __init_subclass__.
