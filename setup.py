@@ -96,7 +96,7 @@ setup(
     project_urls={
         'Bug Tracker': 'https://github.com/cgohlke/lfdfiles/issues',
         'Source Code': 'https://github.com/cgohlke/lfdfiles',
-        # 'Documentation': 'https://',
+        'Documentation': 'https://www.cgohlke.com/docs/lfdfiles',
     },
     packages=['lfdfiles'],
     package_data={'lfdfiles': ['py.typed']},
@@ -116,5 +116,6 @@ setup(
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: 3.14',
+        'Programming Language :: Python :: 3.15',
     ],
 )
