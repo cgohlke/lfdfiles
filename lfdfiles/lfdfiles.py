@@ -42,12 +42,12 @@ Supported formats include:
 - CCP4 MAP
 - Vaa3D RAW
 - Bio-Rad(r) PIC
-- ISS Vista IFLI, IFI
+- ISS Vista IFLI, IFI, TDFLIM
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.4.30
+:Version: 2026.6.24
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -75,16 +75,21 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.13, 3.14.4 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.4.11
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.9
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.14, 3.14.6, 3.15.0b3 64-bit
+- `Numpy <https://pypi.org/project/numpy>`_ 2.5.0
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.6.1
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.0
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.3.3
+- `Click <https://pypi.python.org/pypi/click>`_ 8.4.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.6.24
+
+- Add VistaTdflim class for reading ISS Vista TDFLIM files.
+- Support Python 3.15.
 
 2026.4.30
 
@@ -233,7 +238,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2026.4.30'
+__version__ = '2026.6.24'
 
 __all__ = [
     'FILE_EXTENSIONS',
@@ -270,6 +275,7 @@ __all__ = [
     'Vaa3dRaw',
     'VistaIfi',
     'VistaIfli',
+    'VistaTdflim',
     'VoxxMap',
     '__version__',
     'bioradpic_write',
@@ -1038,7 +1044,7 @@ class LfdFileSequence(FileSequence):
             def imread_func(
                 filename: str | os.PathLike[Any],
                 /,
-                lfdfile: type[LfdFile] = imread,  # type: ignore[assignment]
+                lfdfile: type[LfdFile] = imread,
                 **kwargs: Any,
             ) -> NDArray[Any]:
                 with lfdfile(filename) as lfdf:
@@ -3532,6 +3538,329 @@ class VistaIfli(LfdFile):
         )
 
 
+class VistaTdflim(LfdFile):
+    """ISS Vista time-domain fluorescence lifetime image.
+
+    VistaTdflim files are ZIP archives containing acquisition metadata in
+    ``dataProps/Core.xml`` and raw photon histogram data in
+    ``data/PrimaryDecayData.bin``.
+
+    Two binary format variants exist, identified by the ``<FileVersion>``
+    element in the XML:
+
+    - Version 1 (``<FileVersion>`` absent):
+      ``uint16``, dimension order ``TCYXH``.
+    - Version 2 (``<iVersionNumber>2</iVersionNumber>``):
+      ``uint32``, dimension order ``TCYX(H+2)``.
+      The last dimension contains two trailing uint32 words per pixel
+      (reserved zero word and a pre-computed float32 lifetime preview).
+
+    The returned array has shape ``(T, C, Y, X, H)``, where T is the number
+    of time series points, C is the channel count, Y and X are spatial
+    dimensions, and H is the photon histogram bin count.
+
+    Parameters:
+        filename: Name of file to open.
+
+    Examples:
+        >>> with VistaTdflim(DATA / 'version1.iss-tdflim') as f:
+        ...     data = f.asarray()
+        ...     f.axes
+        ...
+        'TCYXH'
+        >>> data.shape
+        (1, 2, 128, 128, 1024)
+        >>> with VistaTdflim(DATA / 'version2.iss-tdflim') as f:
+        ...     data = f.asarray()
+        ...     data.shape
+        ...
+        (1, 1, 128, 128, 4096)
+
+    """
+
+    _filepattern = r'.*\.(iss-tdflim|tdflim)$'
+
+    attrs: dict[str, Any]
+    """Metadata from Core.xml."""
+
+    coords: dict[str, NDArray[Any]]
+    """Coordinate arrays keyed by one-letter axis codes."""
+
+    @override
+    def _init(self, **kwargs: Any) -> None:
+        """Read and parse metadata from Core.xml inside ZIP archive."""
+        from xml.etree import ElementTree
+
+        assert self._fh is not None
+        try:
+            with zipfile.ZipFile(self._fh) as zf:
+                xml_files = [
+                    n for n in zf.namelist() if n.endswith('Core.xml')
+                ]
+                if not xml_files:
+                    raise LfdFileError(self, 'Core.xml not found')
+                with zf.open(xml_files[0]) as fh:
+                    root = ElementTree.parse(fh).getroot()  # noqa: S314
+                bin_files = [
+                    n
+                    for n in zf.namelist()
+                    if n.endswith('PrimaryDecayData.bin')
+                ]
+                if not bin_files:
+                    raise LfdFileError(self, 'PrimaryDecayData.bin not found')
+                bin_size = zf.getinfo(bin_files[0]).file_size
+        except zipfile.BadZipFile as exc:
+            raise LfdFileError(self) from exc
+
+        data_type = root.findtext('DataType')
+        if data_type != 'TDFlimData':
+            raise LfdFileError(
+                self,
+                f'unsupported DataType {data_type!r}, expected TDFlimData',
+            )
+
+        # parse dimensions
+        dims = root.find('Dimensions')
+        pcs = root.find('PhotonCountingSettings')
+        if dims is None or pcs is None:
+            raise LfdFileError(self, 'missing required XML elements')
+
+        def _int(node: ElementTree.Element, tag: str) -> int:
+            el = node.find(tag)
+            if el is None or not el.text:
+                raise LfdFileError(self, f'<{tag}> not found')
+            return int(el.text.strip())
+
+        def _float(node: ElementTree.Element, tag: str) -> float:
+            el = node.find(tag)
+            if el is None or not el.text:
+                raise LfdFileError(self, f'<{tag}> not found')
+            return float(el.text.strip())
+
+        sizet = _int(dims, 'TimeSeriesCount')
+        sizec = _int(dims, 'ChannelCount')
+        sizey = _int(dims, 'FrameHeight')
+        sizex = _int(dims, 'FrameWidth')
+        sizeh = _int(pcs, 'AdcResolution')
+
+        fv_node = root.find('FileVersion')
+        if fv_node is not None:
+            iv = fv_node.find('iVersionNumber')
+            file_version = (
+                int(iv.text.strip()) if iv is not None and iv.text else 1
+            )
+        else:
+            file_version = 1
+
+        size = sizet * sizec * sizey * sizex
+        if file_version == 1:
+            expected = size * sizeh * 2
+            if bin_size != expected:
+                raise LfdFileError(
+                    self,
+                    f'binary size mismatch (version 1): '
+                    f'expected {expected}, got {bin_size}',
+                )
+            self.dtype = numpy.dtype(numpy.uint16)
+        elif file_version == 2:
+            expected = size * (sizeh + 2) * 4
+            if bin_size != expected:
+                raise LfdFileError(
+                    self,
+                    f'binary size mismatch (version 2): '
+                    f'expected {expected}, got {bin_size}',
+                )
+            self.dtype = numpy.dtype(numpy.uint32)
+        else:
+            raise LfdFileError(
+                self, f'unsupported file version {file_version!r}'
+            )
+
+        # parse metadata attributes
+        channel_ids_node = root.find('ChannelIds')
+        if channel_ids_node is not None:
+            channel_ids = [
+                int(el.text.strip())
+                for el in channel_ids_node.findall('ChannelId')
+                if el.text
+            ]
+        else:
+            channel_ids = list(range(sizec))
+        if len(channel_ids) != sizec:
+            channel_ids = list(range(sizec))
+
+        units = {
+            'micrometer': 'um',
+            'nanometer': 'nm',
+            'millimeter': 'mm',
+            'pixel': 'px',
+        }
+        coord_unit_type = root.findtext('CoordUnitType') or ''
+        spatial_unit = units.get(coord_unit_type.lower(), coord_unit_type)
+
+        tac_time_range = _float(pcs, 'TacTimeRange')
+
+        ef_node = root.find('.//ExcitationFrequency')
+        if ef_node is not None and ef_node.text:
+            frequency = float(ef_node.text.strip()) / 1e6
+        else:
+            frequency = 1e3 / tac_time_range
+
+        self.attrs = {
+            'file_version': file_version,
+            'datetime_stamp': root.findtext('DateTimeStamp') or '',
+            'channel_ids': channel_ids,
+            'frequency': frequency,
+            'tac_time_range': tac_time_range,
+            'macro_time_clock_frequency': _float(
+                pcs, 'MacroTimeClockFrequency'
+            ),
+            'pixel_dwell_time': _float(root, 'PixelDwellTime'),
+            'coord_unit_type': coord_unit_type,
+            'spatial_unit': spatial_unit,
+        }
+
+        # parse axes coordinates
+        self.coords = {}
+        time_series = root.find('TimeSeries')
+        if time_series is not None:
+            tags_node = time_series.find('TimeSeriesTags')
+            if tags_node is not None:
+                tags = [
+                    float(el.text.strip())
+                    for el in tags_node.findall('TimeTag')
+                    if el.text
+                ]
+                if len(tags) == sizet:
+                    self.coords['T'] = numpy.asarray(tags, dtype=numpy.float64)
+
+        self.coords['C'] = numpy.asarray(channel_ids, dtype=numpy.uint16)
+
+        boundary = root.find('Boundary')
+        if boundary is not None:
+            frame_top = boundary.findtext('FrameTop')
+            frame_bottom = boundary.findtext('FrameBottom')
+            frame_left = boundary.findtext('FrameLeft')
+            frame_right = boundary.findtext('FrameRight')
+
+            if frame_top is not None and frame_bottom is not None:
+                self.coords['Y'] = numpy.linspace(
+                    float(frame_top),
+                    float(frame_bottom),
+                    sizey,
+                    endpoint=False,
+                )
+            if frame_left is not None and frame_right is not None:
+                self.coords['X'] = numpy.linspace(
+                    float(frame_left),
+                    float(frame_right),
+                    sizex,
+                    endpoint=False,
+                )
+
+            bnd_width = boundary.findtext('FrameWidth')
+            bnd_height = boundary.findtext('FrameHeight')
+            if bnd_width is not None:
+                self.attrs['frame_width'] = float(bnd_width)
+            if bnd_height is not None:
+                self.attrs['frame_height'] = float(bnd_height)
+
+        self.coords['H'] = numpy.linspace(
+            0, tac_time_range, sizeh, endpoint=False
+        )
+
+        self.shape = (sizet, sizec, sizey, sizex, sizeh)
+        self.axes = 'TCYXH'
+
+    @override
+    def _asarray(self, **kwargs: Any) -> NDArray[Any]:
+        """Return photon histogram array of shape (T, C, Y, X, H)."""
+        assert self._fh is not None
+        assert self.shape is not None
+        assert self.dtype is not None
+        sizet, sizec, sizey, sizex, sizeh = self.shape
+        file_version = self.attrs['file_version']
+
+        with zipfile.ZipFile(self._fh) as zf:
+            bin_files = [
+                n for n in zf.namelist() if n.endswith('PrimaryDecayData.bin')
+            ]
+            with zf.open(bin_files[0]) as fh:
+                raw = fh.read()
+
+        if file_version == 1:
+            data = numpy.frombuffer(raw, dtype=numpy.uint16)
+            return data.reshape(self.shape).copy()
+        # version 2: each pixel has H uint32 counts + 2 uint32 footer words
+        data32 = numpy.frombuffer(raw, dtype=numpy.uint32)
+        counts = data32.reshape(sizet * sizec * sizey * sizex, sizeh + 2)[
+            :, :sizeh
+        ]
+        return counts.reshape(self.shape).copy()
+
+    def lifetime(self) -> NDArray[numpy.float32]:
+        """Return lifetime image from version 2 file as NumPy array.
+
+        The returned array has shape ``(T, C, Y, X)`` and type float32.
+        The lifetime values are pre-computed by the ISS Vista acquisition
+        software.
+
+        """
+        assert self._fh is not None
+        assert self.shape is not None
+        if self.attrs['file_version'] != 2:
+            msg = 'lifetime is only available for version 2 files'
+            raise ValueError(self, msg)
+        sizet, sizec, sizey, sizex, sizeh = self.shape
+        with zipfile.ZipFile(self._fh) as zf:
+            bin_file = next(
+                n for n in zf.namelist() if n.endswith('PrimaryDecayData.bin')
+            )
+            with zf.open(bin_file) as fh:
+                buffer = fh.read()
+        # layout: (pixels, H + 2); last column is float32 lifetime
+        lifetime = numpy.frombuffer(buffer, dtype=numpy.float32)
+        lifetime = lifetime.reshape((sizet, sizec, sizey, sizex, sizeh + 2))
+        return lifetime[..., -1].copy()
+
+    @override
+    def _plot(self, figure: Figure, /, **kwargs: Any) -> None:
+        """Display data in matplotlib figure."""
+        assert pyplot is not None
+        update_kwargs(kwargs, cmap='viridis')
+        pyplot.subplots_adjust(bottom=0.07, top=0.93)
+
+        channel = kwargs.pop('channel', 0)
+
+        data = self.asarray()
+        image = numpy.mean(data[:, channel], axis=(0, -1))
+        hist = numpy.mean(data, axis=(0, 2, 3))
+
+        ax = pyplot.subplot2grid((3, 1), (0, 0), colspan=2, rowspan=2)
+        ax.set_title(self._filename + f' (Ch{channel})')
+        ax.imshow(image, **kwargs)
+        ax = pyplot.subplot2grid((3, 1), (2, 0))
+        ax.set_title('Mean')
+        ax.set_xlim([0, hist.shape[-1] - 1])
+        ax.set_xlabel('Histogram bin')
+        for h in hist:
+            ax.plot(h)
+
+    @override
+    def _totiff(self, tif: TiffWriter, /, **kwargs: Any) -> None:
+        """Write image data to TIFF file."""
+        update_kwargs(kwargs, metadata={'axes': self.axes})
+        tif.write(self.asarray(), **kwargs)
+
+    @override
+    def _str(self) -> str | None:
+        """Return additional information about file."""
+        return indent(
+            'attrs:',
+            *(f'{k}: {v}' for k, v in self.attrs.items()),
+        )
+
+
 class FlimfastFlif(LfdFile):
     """FlimFast fluorescence lifetime image.
 
@@ -5156,6 +5485,8 @@ FILE_EXTENSIONS = {
     '.z64': SimfcsZ64,
     '.cyl': SimfcsCyl,
     '.ifli': VistaIfli,
+    '.iss-tdflim': VistaTdflim,
+    '.tdflim': VistaTdflim,
     '.vpl': SimfcsVpl,
     '.vpp': SimfcsVpp,
     '.ifi': VistaIfi,
@@ -5163,6 +5494,7 @@ FILE_EXTENSIONS = {
     '.flif': FlimfastFlif,
     '.v3draw': Vaa3dRaw,
 }
+"""Supported LFD file extensions."""
 
 if __name__ == '__main__':
     main()
