@@ -15,12 +15,12 @@ Supported formats include:
 - CCP4 MAP
 - Vaa3D RAW
 - Bio-Rad(r) PIC
-- ISS Vista IFLI, IFI
+- ISS Vista IFLI, IFI, TDFLIM
 - FlimFast FLIF
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.4.30
+:Version: 2026.6.24
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -48,16 +48,21 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.13, 3.14.4 64-bit
-- `NumPy <https://pypi.org/project/numpy>`_ 2.4.4
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.4.11
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.10.9
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.14, 3.14.6, 3.15.0b3 64-bit
+- `Numpy <https://pypi.org/project/numpy>`_ 2.5.0
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.6.1
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.0
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.3.3
+- `Click <https://pypi.python.org/pypi/click>`_ 8.4.1
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.6.24
+
+- Add VistaTdflim class for reading ISS Vista TDFLIM files.
+- Support Python 3.15.
 
 2026.4.30
 
