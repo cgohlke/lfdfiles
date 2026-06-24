@@ -29,7 +29,7 @@
 
 """Unittests for the lfdfiles package.
 
-:Version: 2026.4.30
+:Version: 2026.6.24
 
 """
 
@@ -59,6 +59,7 @@ from lfdfiles import (
     GlobalsAscii,
     GlobalsLif,
     LfdFile,
+    LfdFileError,
     LfdFileSequence,
     RawPal,
     SimfcsB64,
@@ -80,6 +81,7 @@ from lfdfiles import (
     Vaa3dRaw,
     VistaIfi,
     VistaIfli,
+    VistaTdflim,
     VoxxMap,
     bioradpic_write,
     ccp4map_write,
@@ -124,13 +126,13 @@ def test_lfdfile_open():
     ) as f:
         assert type(f) is SimfcsBin
 
-    with pytest.raises(lfdfiles.LfdFileError):
+    with pytest.raises(LfdFileError):
         LfdFile.open(DATA / 'flimfast.flif', registry=[])
 
 
 def test_lfdfileerror():
     """Test LfdFileError is a ValueError subclass."""
-    assert issubclass(lfdfiles.LfdFileError, ValueError)
+    assert issubclass(LfdFileError, ValueError)
 
 
 def test_module_docstring_example():
@@ -203,7 +205,7 @@ def test_lfdfile_filenotfounderror():
 
 def test_lfdfile_validate():
     """Test LfdFile raises LfdFileError on filename pattern mismatch."""
-    with pytest.raises(lfdfiles.LfdFileError):
+    with pytest.raises(LfdFileError):
         SimfcsRef('wrong_extension.xyz')
 
 
@@ -569,6 +571,65 @@ def test_vistaifli():
         assert_array_equal(tif.asarray()[0, 0], data[..., 0, 0])
 
 
+def test_vistatdflim_v1():
+    """Test VistaTdflim with version 1 file (uint16)."""
+    with VistaTdflim(DATA / 'version1.iss-tdflim') as f:
+        data = f.asarray()
+        f.totiff(TEMP / '_vista_tdflim_v1.tif')
+        assert f.axes == 'TCYXH'
+        assert f.shape == (1, 2, 128, 128, 1024)
+        assert f.dtype == numpy.uint16
+        assert f.attrs['file_version'] == 1
+        assert f.attrs['datetime_stamp'] == '2022-11-18T16:40:35.9871206+01:00'
+        assert f.attrs['channel_ids'] == [0, 2]
+        assert pytest.approx(f.attrs['frequency'], 0.001) == 79.9463
+        assert pytest.approx(f.attrs['tac_time_range'], 1e-6) == 12.5083933
+        assert sorted(f.coords.keys()) == ['C', 'H', 'T', 'X', 'Y']
+        assert f.coords['T'].shape == (1,)
+        assert f.coords['C'].tolist() == [0, 2]
+        assert f.coords['Y'].shape == (128,)
+        assert f.coords['X'].shape == (128,)
+        assert f.coords['H'].shape == (1024,)
+        assert data.shape == f.shape
+        assert int(data[0, 0, 3, 0, 97]) == 1980
+
+        with pytest.raises(ValueError):
+            f.lifetime()
+
+    with TiffFile(TEMP / '_vista_tdflim_v1.tif') as tif:
+        assert_array_equal(tif.asarray(), data)
+
+
+def test_vistatdflim_v2():
+    """Test VistaTdflim with version 2 file (uint32, with per-pixel footer)."""
+    with VistaTdflim(DATA / 'version2.iss-tdflim') as f:
+        data = f.asarray()
+        f.totiff(TEMP / '_vista_tdflim_v2.tif')
+        assert f.axes == 'TCYXH'
+        assert f.shape == (1, 1, 128, 128, 4096)
+        assert f.dtype == numpy.uint32
+        assert f.attrs['file_version'] == 2
+        assert f.attrs['datetime_stamp'] == '2026-04-22T13:00:42.4049325+02:00'
+        assert f.attrs['channel_ids'] == [2]
+        assert f.attrs['frequency'] == 20.0
+        assert sorted(f.coords.keys()) == ['C', 'H', 'T', 'X', 'Y']
+        assert f.coords['T'].shape == (1,)
+        assert f.coords['C'].tolist() == [2]
+        assert f.coords['Y'].shape == (128,)
+        assert f.coords['X'].shape == (128,)
+        assert f.coords['H'].shape == (4096,)
+        assert data.shape == f.shape
+        assert int(data[0, 0, 114, 34, 325]) == 11
+
+        lifetime = f.lifetime()
+        assert lifetime.shape == (1, 1, 128, 128)
+        assert lifetime.dtype == numpy.float32
+        assert lifetime.mean() == pytest.approx(3.007484)
+
+    with TiffFile(TEMP / '_vista_tdflim_v2.tif') as tif:
+        assert_array_equal(tif.asarray(), data)
+
+
 def test_flimfastflif():
     """Test FlimfastFlif."""
     f = FlimfastFlif(DATA / 'flimfast.flif')
@@ -830,9 +891,11 @@ def test_stripnull():
 
 @pytest.mark.parametrize(
     'filename',
-    itertools.chain.from_iterable(
-        glob.glob(f'**/*{ext}', root_dir=DATA, recursive=True)
-        for ext in FILE_EXTENSIONS
+    tuple(
+        itertools.chain.from_iterable(
+            glob.glob(f'**/*{ext}', root_dir=DATA, recursive=True)
+            for ext in FILE_EXTENSIONS
+        )
     ),
 )
 def test_glob(filename):
