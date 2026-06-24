@@ -1,6 +1,11 @@
 Revisions
 =========
 
+2026.6.24
+
+- Add VistaTdflim class for reading ISS Vista TDFLIM files.
+- Support Python 3.15.
+
 2026.4.30
 
 - Remove FlimboxFbd, FlimboxFbf, and FlimboxFbs (breaking; use fbdfile).
