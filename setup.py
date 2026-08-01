@@ -96,7 +96,7 @@ setup(
     project_urls={
         'Bug Tracker': 'https://github.com/cgohlke/lfdfiles/issues',
         'Source Code': 'https://github.com/cgohlke/lfdfiles',
-        'Documentation': 'https://www.cgohlke.com/docs/lfdfiles',
+        'Documentation': 'https://www.cgohlke.com/docs/lfdfiles/',
     },
     packages=['lfdfiles'],
     package_data={'lfdfiles': ['py.typed']},
