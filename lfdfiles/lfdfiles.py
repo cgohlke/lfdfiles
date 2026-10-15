@@ -47,7 +47,7 @@ Supported formats include:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.6.24
+:Version: 2026.10.15
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -62,9 +62,8 @@ Print the console script usage::
 
     python -m lfdfiles --help
 
-The lfdfiles library is type annotated and documented via docstrings.
-
-See `Examples`_ for using the programming interface.
+See `Examples`_ and `Documentation <https://www.cgohlke.com/docs/lfdfiles/>`_
+for using the programming interface.
 
 Source code and support are available on
 `GitHub <https://github.com/cgohlke/lfdfiles>`_.
@@ -75,16 +74,24 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.14, 3.14.6, 3.15.0b3 64-bit
-- `Numpy <https://pypi.org/project/numpy>`_ 2.5.0
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.6.1
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.0
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.16, 3.14.8, 3.15.0 64-bit
+- `Numpy <https://pypi.org/project/numpy>`_ 2.5.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.9.20
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.2
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.4.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.5.0
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.10.15
+
+- Improve reading ISS IFI files.
+- Use struct.unpack_from where possible.
+- Fix reading big-endian CCP4 map headers.
+- Fix convert CLI passing unsupported compress argument to TiffWriter.
+- Warn about trailing bytes in ISS IFI files.
 
 2026.6.24
 
@@ -108,42 +115,6 @@ Revisions
 - Drop support for Python 3.11.
 
 2026.1.14
-
-- Improve code quality.
-
-2025.12.12
-
-- Derive LfdFileError from ValueError.
-- Improve code quality.
-
-2025.9.17
-
-- Many breaking changes to FLIMbox functionality (use fbdfile package instead):
-- Discourage use of FlimboxFbd, FlimboxFbf, and FlimboxFbs classes.
-- Use fbdfile package to implement FlimboxFbd, FlimboxFbf, and FlimboxFbs.
-- Remove flimbox_histogram, flimbox_decode, and sflim_decode functions.
-- Remove convert_fbd2b64 function and fbd2b64 command line app.
-- Remove deprecated SimfcsFbf, and SimfcsFbd classes.
-- Remove deprecated simfcsfbd_histogram and simfcsfbd_decode functions.
-
-2025.7.31
-
-- Read variants of SimFCS REF files.
-- Drop support for Python 3.10.
-
-2025.5.10
-
-- Mark Cython extension free-threading compatible.
-- Remove doctest command line option.
-- Support Python 3.14.
-
-2025.3.16
-
-- Replace deprecated tifffile.stripnull function.
-- Fix misspelled VistaIfli.header keys.
-- Drop support for Python 3.9.
-
-2024.10.24
 
 - …
 
@@ -238,7 +209,7 @@ Convert the PIC file to a compressed TIFF file:
 
 from __future__ import annotations
 
-__version__ = '2026.6.24'
+__version__ = '2026.10.15'
 
 __all__ = [
     'FILE_EXTENSIONS',
@@ -2588,8 +2559,7 @@ class SimfcsZ64(LfdFile):
         """Read file header."""
         self._skip = 8 if doubleheader else 0
         header = self._decompress_header(self._skip + 8)
-        header = header[self._skip : self._skip + 8]
-        size, inum = struct.unpack('<ii', header)[:2]
+        size, inum = struct.unpack_from('<ii', header, self._skip)[:2]
         if not 2 <= size <= maxsize[-1] or not 2 <= inum <= maxsize[0]:
             msg = 'image size out of range'
             raise LfdFileError(self, msg)
@@ -3139,8 +3109,8 @@ class VistaIfi(LfdFile):
 
     VistaVision IFI files contain multi-dimensional confocal intensity images.
 
-    After a header of 256 bytes, the images are stored as float32 in CZYX
-    order.
+    After a header of 256 bytes, the images are stored as float32 in
+    TCZYX order. Singleton leading dimensions are omitted.
 
     Parameters:
         filename: Name of file to open.
@@ -3168,11 +3138,20 @@ class VistaIfi(LfdFile):
         [
             # undocumented file header
             ('signature', 'S10'),  # 'VISTAIMAGE'
-            ('version', 'u2'),
-            ('channel_bits', 'u2'),
+            ('version', 'u1'),
+            ('image_type', 'u1'),
+            ('channel_bits', 'u1'),
+            ('compression', 'u1'),
             ('dimensions', 'u2', 3),  # XYZ
-            ('boundaries', 'f4', 6),
+            ('boundaries', 'f4', 6),  # x0, x1, y0, y1, z0, z1
             ('dwelltime', 'f4'),
+            ('_padding', 'u1', 45),  # bytes 48-92
+            ('n_channels', 'u2'),
+            ('n_time_series', 'u2'),
+            ('pixel_interval', 'f4'),
+            ('line_interval', 'f4'),
+            ('frame_interval', 'f4'),
+            ('n_frames_integrated', 'u2'),
         ]
     )
 
@@ -3189,16 +3168,50 @@ class VistaIfi(LfdFile):
             logger().warning(
                 f'unrecognized VistaIfi file version {h["version"]}'
             )
-        self.shape = tuple(int(i) for i in reversed(h['dimensions']))
-        if self.shape[0] == 1:
-            self.shape = self.shape[1:]
-            self.axes = 'YX'
+        sizex, sizey, sizez = (int(i) for i in h['dimensions'])
+
+        sizec = int(h['n_channels'])
+        if sizec <= 0:
+            sizec = len(self.channel_indices)
+        sizec = max(sizec, 1)
+
+        # calculate number of time points from data size
+        spatial = max(sizez, 1) * sizey * sizex
+        data_bytes = self._filesize - 256
+        frame_bytes = sizec * spatial * 4
+        if frame_bytes > 0:
+            sizet, remainder = divmod(data_bytes, frame_bytes)
+            if sizet < 1:
+                msg = (
+                    f'data size {data_bytes} is smaller than '
+                    f'frame size {frame_bytes}'
+                )
+                raise LfdFileError(self, msg)
+            if remainder != 0:
+                logger().warning(
+                    f'VistaIfi data size {data_bytes} is not a multiple of '
+                    f'frame size {frame_bytes}; '
+                    f'ignoring {remainder} trailing bytes'
+                )
         else:
-            self.axes = 'ZYX'
-        indices = self.channel_indices
-        if len(indices) > 1:
-            self.shape = (len(indices), *self.shape)
-            self.axes = 'C' + self.axes
+            sizet = 1
+
+        shape: list[int] = []
+        axes = ''
+        if sizet > 1:
+            shape.append(sizet)
+            axes += 'T'
+        if sizec > 1:
+            shape.append(sizec)
+            axes += 'C'
+        if sizez > 1:
+            shape.append(sizez)
+            axes += 'Z'
+        shape.extend([sizey, sizex])
+        axes += 'YX'
+
+        self.shape = tuple(shape)
+        self.axes = axes
         self.dtype = numpy.dtype(numpy.float32)
 
     def __getitem__(self, key: str, /) -> Any:
@@ -4674,6 +4687,14 @@ class Ccp4Map(LfdFile):
         if header[208:212] not in {b'MAP ', b'PAM\x00', b'MAP\x00'}:
             msg = f' {header[:32]}'
             raise LfdFileError(self, msg)
+        machst = header[212:216]
+        try:
+            byteorder = {b'DA\x00\x00': '<', b'\x11\x11\x00\x00': '>'}[machst]
+        except KeyError:
+            byteorder = '='
+            warnings.warn(
+                f'Ccp4Map: unknown machine stamp: {machst!r}', stacklevel=2
+            )
         try:
             (
                 nc,
@@ -4729,20 +4750,12 @@ class Ccp4Map(LfdFile):
                 L8,
                 L9,
             ) = struct.unpack(
-                '3ii3i3i3f3f3i3fiii9f3f60x4s4sfi'
+                byteorder + '3ii3i3i3f3f3i3fiii9f3f60x4s4sfi'
                 '80s80s80s80s80s80s80s80s80s80s',
                 header,
             )
         except struct.error as exc:
             raise LfdFileError(self) from exc
-        try:
-            # machst = header[212:216]
-            byteorder = {b'DA\x00\x00': '<', b'\x11\x11\x00\x00': '>'}[machst]
-        except KeyError:
-            byteorder = '='
-            warnings.warn(
-                f'Ccp4Map: unknown machine stamp: {machst}', stacklevel=2
-            )
         try:
             self.dtype = numpy.dtype(byteorder + Ccp4Map._dtypes[mode])
         except KeyError as exc:
@@ -4984,16 +4997,17 @@ class Vaa3dRaw(LfdFile):
         # next byte is byte order
         byteorder = {b'B': '>', b'L': '<'}[header[24:25]]
         # next two bytes are data itemsize and dtype
-        itemsize = struct.unpack(byteorder + 'h', header[25:27])[0]
+        itemsize = struct.unpack_from(byteorder + 'h', header, 25)[0]
         self.dtype = numpy.dtype(
             byteorder + {1: 'u1', 2: 'u2', 4: 'f4'}[itemsize]
         )
         # next 8 or 16 bytes are data shape
-        self.shape = struct.unpack(byteorder + 'hhhh', header[27:])[::-1]
+        self.shape = struct.unpack_from(byteorder + 'hhhh', header, 27)[::-1]
         if self._filesize != len(header) + product(self.shape) * itemsize:
             # 4 byte format
             header += self._fh.read(8)
-            self.shape = struct.unpack(byteorder + 'IIII', header[27:])[::-1]
+            self.shape = struct.unpack_from(byteorder + 'IIII', header, 27)
+            self.shape = self.shape[::-1]
             if self._filesize != len(header) + product(self.shape) * itemsize:
                 msg = 'file size mismatch'
                 raise LfdFileError(self, msg)
@@ -5447,7 +5461,14 @@ def main() -> None:
                 filetypes=[('All files', '*')],
             )
         if files:
-            convert2tiff(files, compress=compress)
+            if compress:
+                convert2tiff(
+                    files,
+                    compression='zlib',
+                    compressionargs={'level': compress},
+                )
+            else:
+                convert2tiff(files)
 
     @cli.command(help='View data in file.')
     @click.argument('files', nargs=-1, type=click.Path(dir_okay=False))
