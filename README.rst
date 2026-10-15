@@ -20,7 +20,7 @@ Supported formats include:
 
 :Author: `Christoph Gohlke <https://www.cgohlke.com>`_
 :License: BSD-3-Clause
-:Version: 2026.6.24
+:Version: 2026.10.15
 :DOI: `10.5281/zenodo.8384166 <https://doi.org/10.5281/zenodo.8384166>`_
 
 Quickstart
@@ -35,9 +35,8 @@ Print the console script usage::
 
     python -m lfdfiles --help
 
-The lfdfiles library is type annotated and documented via docstrings.
-
-See `Examples`_ for using the programming interface.
+See `Examples`_ and `Documentation <https://www.cgohlke.com/docs/lfdfiles/>`_
+for using the programming interface.
 
 Source code and support are available on
 `GitHub <https://github.com/cgohlke/lfdfiles>`_.
@@ -48,16 +47,24 @@ Requirements
 This revision was tested with the following requirements and dependencies
 (other versions may work):
 
-- `CPython <https://www.python.org>`_ 3.12.10, 3.13.14, 3.14.6, 3.15.0b3 64-bit
-- `Numpy <https://pypi.org/project/numpy>`_ 2.5.0
-- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.6.1
-- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.0
+- `CPython <https://www.python.org>`_ 3.12.10, 3.13.16, 3.14.8, 3.15.0 64-bit
+- `Numpy <https://pypi.org/project/numpy>`_ 2.5.4
+- `Tifffile <https://pypi.org/project/tifffile/>`_ 2026.9.20
+- `Matplotlib <https://pypi.org/project/matplotlib/>`_ 3.11.2
   (optional, for plotting)
-- `Click <https://pypi.python.org/pypi/click>`_ 8.4.1
+- `Click <https://pypi.python.org/pypi/click>`_ 8.5.0
   (optional, for command line apps)
 
 Revisions
 ---------
+
+2026.10.15
+
+- Improve reading ISS IFI files.
+- Use struct.unpack_from where possible.
+- Fix reading big-endian CCP4 map headers.
+- Fix convert CLI passing unsupported compress argument to TiffWriter.
+- Warn about trailing bytes in ISS IFI files.
 
 2026.6.24
 
@@ -81,42 +88,6 @@ Revisions
 - Drop support for Python 3.11.
 
 2026.1.14
-
-- Improve code quality.
-
-2025.12.12
-
-- Derive LfdFileError from ValueError.
-- Improve code quality.
-
-2025.9.17
-
-- Many breaking changes to FLIMbox functionality (use fbdfile package instead):
-- Discourage use of FlimboxFbd, FlimboxFbf, and FlimboxFbs classes.
-- Use fbdfile package to implement FlimboxFbd, FlimboxFbf, and FlimboxFbs.
-- Remove flimbox_histogram, flimbox_decode, and sflim_decode functions.
-- Remove convert_fbd2b64 function and fbd2b64 command line app.
-- Remove deprecated SimfcsFbf, and SimfcsFbd classes.
-- Remove deprecated simfcsfbd_histogram and simfcsfbd_decode functions.
-
-2025.7.31
-
-- Read variants of SimFCS REF files.
-- Drop support for Python 3.10.
-
-2025.5.10
-
-- Mark Cython extension free-threading compatible.
-- Remove doctest command line option.
-- Support Python 3.14.
-
-2025.3.16
-
-- Replace deprecated tifffile.stripnull function.
-- Fix misspelled VistaIfli.header keys.
-- Drop support for Python 3.9.
-
-2024.10.24
 
 - …
 
