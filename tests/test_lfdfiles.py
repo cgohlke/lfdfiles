@@ -29,7 +29,7 @@
 
 """Unittests for the lfdfiles package.
 
-:Version: 2026.6.24
+:Version: 2026.10.15
 
 """
 
