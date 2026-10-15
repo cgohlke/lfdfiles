@@ -1,6 +1,14 @@
 Revisions
 =========
 
+2026.10.15
+
+- Improve reading ISS IFI files.
+- Use struct.unpack_from where possible.
+- Fix reading big-endian CCP4 map headers.
+- Fix convert CLI passing unsupported compress argument to TiffWriter.
+- Warn about trailing bytes in ISS IFI files.
+
 2026.6.24
 
 - Add VistaTdflim class for reading ISS Vista TDFLIM files.
